@@ -1,10 +1,6 @@
 <odoo>
-  <data>
-    <!-- Root Menu -->
-    <!-- <menuitem id="menu_my_root"
-            name="Pulse Digest"
-            sequence="10" /> -->
-    <!--
+    <data>
+<!--
         <template id="listing">
           <ul>
             <li t-foreach="objects" t-as="object">
@@ -24,5 +20,5 @@
           </dl>
         </template>
 -->
-  </data>
+    </data>
 </odoo>

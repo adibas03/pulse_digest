@@ -1,3 +1,7 @@
+from odoo import models, fields
+from .constants import SEVERITY_SELECTION, SEVERITY_INFO
+
+
 class PulseRunLine(models.Model):
     _name = "pulse.run.line"
     _description = "Pulse Run Finding"

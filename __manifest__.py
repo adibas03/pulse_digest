@@ -17,7 +17,7 @@ Unlike Odoo's built-in digest (which reports aggregate KPIs), Pulse lists
 the specific records to act on, scoped per-user or per-company, delivered
 by email, in-app notification, or WhatsApp.
     """,
-    "author": "Anthony Adegbemi",
+    "author": "adibas03",
     "website": "https://github.com/adibas03/pulse_digest",
     "license": "LGPL-3",
     "category": "Productivity",
@@ -33,18 +33,24 @@ by email, in-app notification, or WhatsApp.
 
     # always loaded
     'data': [
-        # 'security/ir.model.access.csv',
+        "views/pulse_config_views.xml",
+        "views/pulse_run_views.xml",
+        # 'views/pulse_detector_views.xml',
         'views/views.xml',
-        'views/templates.xml',
+        # 'views/templates.xml',
+        'security/pulse_security.xml',
+        'security/ir.model.access.csv',
+        'data/pulse_detector_data.xml',
+        'data/pulse_cron_data.xml',
     ],
     # only loaded in demonstration mode
     'demo': [
         "demo/pulse_demo.xml",
     ],
     "assets": {
-        "web.assets_backend": [
-            "pulse_digest/static/src/**/*",
-        ],
+        # "web.assets_frontend": [
+        #     "stsatic/src/**/*",
+        # ],
     },
     "installable": True,
     "application": True,

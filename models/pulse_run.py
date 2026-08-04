@@ -1,3 +1,7 @@
+from odoo import models, fields
+from . import pulse_run_line
+
+
 class PulseRun(models.Model):
     _name = "pulse.run"
     _description = "Pulse Run"

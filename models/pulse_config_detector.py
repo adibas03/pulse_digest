@@ -1,3 +1,6 @@
+from odoo import models, fields
+
+
 class PulseConfigDetector(models.Model):
     _name = "pulse.config.detector"
     _description = "Pulse Config Detector"
@@ -16,7 +19,5 @@ class PulseConfigDetector(models.Model):
     is_statistical = fields.Boolean(
         related="detector_id.is_statistical", store=True)
 
-    _sql_constraints = [
-        ("config_detector_uniq", "UNIQUE(config_id, detector_id)",
-         "Each detector can only be linked once per config."),
-    ]
+    _config_detector_uniq = models.Constraint(
+        "UNIQUE(config_id, detector_id)", "Each detector can only be linked once per config.")

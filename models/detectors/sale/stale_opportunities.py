@@ -1,13 +1,13 @@
 # detectors/sale/stale_opportunities.py
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
+from _common import (
     open_opportunity_domain,
 )
-from odoo.addons.pulse_digest.models.detectors.base import (
+from detectors.base import (
     PulseDetectorBase, PulseFinding,
 )
 

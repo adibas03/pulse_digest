@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+
+        <record id="view_pulse_config_form" model="ir.ui.view">
+            <field name="name">pulse.config.form</field>
+            <field name="model">pulse.config</field>
+            <field name="arch" type="xml">
+                <form string="Pulse Configuration">
+                    <header>
+                        <button name="action_run_now" type="object"
+                            string="Run Now" class="oe_highlight" />
+                        <button name="action_view_runs" type="object" string="History"
+                            class="btn-secondary" />
+                    </header>
+                    <sheet>
+                        <group>
+                            <group>
+                                <field name="name" />
+                                <field name="company_id" />
+                                <field name="active" />
+                            </group>
+                            <group>
+                                <field name="run_time" />
+                                <field name="timezone" />
+                                <field name="last_run_date" readonly="1" />
+                            </group>
+                        </group>
+                        <group string="Audience">
+                            <field name="digest_mode" />
+                            <field name="company_recipient_ids" widget="many2many_tags"
+                                invisible="digest_mode == 'per_user'" />
+                            <field name="user_group_id"
+                                invisible="digest_mode == 'company'" />
+                        </group>
+                        <notebook>
+                            <page string="Detectors">
+                                <field name="detector_line_ids">
+                                    <list editable="bottom">
+                                        <field name="detector_id" />
+                                        <field name="category" />
+                                        <field name="is_statistical" />
+                                        <field name="active" />
+                                    </list>
+                                </field>
+                            </page>
+                        </notebook>
+                    </sheet>
+                </form>
+            </field>
+        </record>
+
+        <record id="view_pulse_config_list" model="ir.ui.view">
+            <field name="name">pulse.config.list</field>
+            <field name="model">pulse.config</field>
+            <field name="arch" type="xml">
+                <list>
+                    <field name="name" />
+                    <field name="company_id" />
+                    <field name="digest_mode" />
+                    <field name="run_time" />
+                    <field name="last_run_date" />
+                    <field name="active" />
+                </list>
+            </field>
+        </record>
+
+        <record id="action_pulse_config" model="ir.actions.act_window">
+            <field name="name">Pulse Configuration</field>
+            <field name="res_model">pulse.config</field>
+            <field name="view_mode">list,form</field>
+        </record>
+
+    </data>
+</odoo>

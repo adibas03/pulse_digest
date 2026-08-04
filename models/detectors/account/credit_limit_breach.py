@@ -20,26 +20,26 @@ run — see _suppression_gate in pulse_config.py. The v1.1 per-recipient
 pulse.finding.state table closes this gap.
 """
 
-from odoo.addons.pulse_digest.models.constants import (
+from constants import (
     SEVERITY_WARNING,
     SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.base import (
+from detectors.base import (
     PulseDetectorBase,
     PulseFinding,
 )
 
 
 class CreditLimitBreachDetector(PulseDetectorBase):
-    """Customers whose outstanding AR exceeds their credit limit."""
+    """Flag customers whose outstanding AR balance exceeds their credit limit."""
 
     TECHNICAL_NAME = "account.credit_limit_breach"
 
-    # Persisting condition: same partner can stay over limit indefinitely.
-    # But res.partner has no natural "breach started" date, so AGE_FIELD is
-    # None. The suppression gate sees (SUPPRESSIBLE=True, AGE_FIELD=None) and
-    # delivers every run in v1. v1.1 per-recipient state will be the proper
-    # fix.
+    # Persisting condition: same partner can sit over limit day after day.
+    # But there is no natural age field on res.partner for "when did the
+    # breach start." AGE_FIELD = None signals to _suppression_gate that this
+    # detector wants suppression but cannot provide its own age — so v1
+    # delivers it every run. v1.1 per-recipient state closes this.
     SUPPRESSIBLE = True
     AGE_FIELD = None
 
@@ -50,6 +50,8 @@ class CreditLimitBreachDetector(PulseDetectorBase):
         # Severity is driven by HOW FAR over limit, expressed as a fraction
         # of the limit itself. 0.10 = 10% over -> warning, 0.25 -> critical.
         "severity_thresholds": {
+            # Fraction of credit_limit by which `credit` exceeds it.
+            # 0.10 = 10% over -> warning; 0.25 = 25% over -> critical.
             SEVERITY_WARNING: 0.10,
             SEVERITY_CRITICAL: 0.25,
         },
@@ -58,12 +60,11 @@ class CreditLimitBreachDetector(PulseDetectorBase):
     def compute(self, env, scope):
         self.validate_severity_thresholds(self.params["severity_thresholds"])
 
-        # `res.partner.credit` is company-dependent (the same partner has
-        # different outstanding-AR values per company). Without `with_company`,
+        # `res.partner.credit` is company-dependent (same partner has
+        # different outstanding-AR values per company). Without with_company,
         # both the search and the per-record reads below would use whatever
-        # company `env` happened to be in — typically the cron user's main
-        # company, not necessarily `scope.company`. That would mis-flag or
-        # miss real breaches. Scope all reads to scope.company explicitly.
+        # company env happened to be in — typically the cron user's main
+        # company, not necessarily scope.company. Scope all reads explicitly.
         Partner = env["res.partner"].with_company(scope.company)
 
         # `credit > 0` is a quick filter to skip the (typically large) set of
@@ -75,18 +76,16 @@ class CreditLimitBreachDetector(PulseDetectorBase):
             ("credit", ">", 0),
         ]
 
-        # User scope: narrow to partners where this user is the assigned
-        # salesperson on the partner record. Note this misses partners with
-        # NO assigned salesperson (`user_id = False`) — those breaches appear
-        # only in the company-wide digest, which is the v1 safety net.
-        # Documented so the gap is deliberate, not accidental.
+        # User-scope: narrow to partners where this user is the assigned
+        # salesperson. Partners with NO assigned salesperson are deliberately
+        # invisible to per-user digests in v1 — they appear only in the
+        # company-wide digest, which is the safety net.
         if scope.is_user:
             domain.append(("user_id", "=", scope.user.id))
 
         # Multi-company filtering on res.partner is handled by record rules
-        # together with `with_company()` above. No Python `.filtered()` for
-        # company is needed — doing it twice risks disagreeing with the
-        # framework's own visibility rules.
+        # together with with_company() above; no Python .filtered() for
+        # company is needed.
         partners = Partner.search(domain)
 
         for partner in partners:
@@ -103,11 +102,9 @@ class CreditLimitBreachDetector(PulseDetectorBase):
                 res_model="res.partner",
                 res_id=partner.id,
                 res_name=partner.name,
-                summary=(
-                    f"{partner.name}: {partner.credit:.0f} "
-                    f"vs limit {partner.credit_limit:.0f} "
-                    f"({breach_ratio:+.0%})"
-                ),
+                summary=f"{partner.name}: {partner.credit:.0f} "
+                        f"vs limit {partner.credit_limit:.0f} "
+                        f"({breach_ratio:+.0%})",
                 severity=sev,
                 metric_value=partner.credit,
                 baseline_value=partner.credit_limit,

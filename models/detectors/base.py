@@ -13,7 +13,7 @@ from abc import abstractmethod
 # import path, not via base. (If base ever becomes a deliberate facade for the
 # detector API, re-exporting the severity names here would be the place to do
 # it — but it is not one today.)
-from odoo.addons.pulse_digest.models.constants import SEVERITIES
+from ..constants import SEVERITIES, SEVERITY_INFO
 
 
 class PulseDetectorBase:
@@ -41,6 +41,8 @@ class PulseDetectorBase:
 
     def __init__(self, params=None):
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        if self.TECHNICAL_NAME is None:
+            raise ValueError('Detector subclass TECHNICAL NAME must be set')
 
     @abstractmethod
     def compute(self, env, scope):
@@ -88,7 +90,7 @@ class Scope:
     USER = "user"
     COMPANY = "company"
 
-    __slots__ = ("kind", "company", "user")
+    # __slots__ = ("kind", "company", "user")
 
     def __init__(self, kind, company=None, user=None):
         if kind not in (self.USER, self.COMPANY):

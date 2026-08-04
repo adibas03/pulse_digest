@@ -24,45 +24,47 @@
 
         <!-- ============================================================ -->
         <!-- Demo Pulse config                                            -->
-        <!-- ============================================================ -->
+        <!-- ============================================================ 
 
         <record id="demo_pulse_config_main" model="pulse.config">
             <field name="name">Daily Pulse</field>
-            <field name="company_id" ref="base.main_company" />
-            <field name="active" eval="True" />
+            <field name="company_id" ref="base.main_company"/>
+            <field name="active" eval="True"/>
             <field name="run_time">7.0</field>
             <field name="digest_mode">both</field>
-            <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]" />
-            <field name="user_group_id" ref="group_pulse_recipient" />
+            <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]"/>
+            <field name="user_group_id" ref="group_pulse_recipient"/>
         </record>
+    -->
 
         <!-- ============================================================ -->
         <!-- Activated detectors (defaults-on)                            -->
-        <!-- ============================================================ -->
+        <!-- ============================================================ 
 
         <record id="demo_config_detector_overdue" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_account_overdue_invoices" />
-            <field name="active" eval="True" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_overdue_invoices"/>
+            <field name="active" eval="True"/>
         </record>
 
         <record id="demo_config_detector_credit_limit" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_account_credit_limit_breach" />
-            <field name="active" eval="True" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_credit_limit_breach"/>
+            <field name="active" eval="True"/>
         </record>
 
         <record id="demo_config_detector_stale_opps" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_sale_stale_opportunities" />
-            <field name="active" eval="True" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_stale_opportunities"/>
+            <field name="active" eval="True"/>
         </record>
 
         <record id="demo_config_detector_closing_today" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_sale_deals_closing_today" />
-            <field name="active" eval="True" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_deals_closing_today"/>
+            <field name="active" eval="True"/>
         </record>
+-->
 
         <!-- ============================================================ -->
         <!-- Linked-but-inactive detectors (statistical, opt-in)          -->
@@ -70,19 +72,20 @@
         <!-- Linked so they show in the config UI with an enable toggle,  -->
         <!-- demonstrating the "Conservative defaults, statistical ones   -->
         <!-- visible but off" UX from the spec.                           -->
-        <!-- ============================================================ -->
+        <!-- ============================================================ 
 
         <record id="demo_config_detector_payment_outlier" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_account_payment_delay_outlier" />
-            <field name="active" eval="False" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_payment_delay_outlier"/>
+            <field name="active" eval="False"/>
         </record>
 
         <record id="demo_config_detector_velocity" model="pulse.config.detector">
-            <field name="config_id" ref="demo_pulse_config_main" />
-            <field name="detector_id" ref="detector_sale_deal_velocity_drop" />
-            <field name="active" eval="False" />
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_deal_velocity_drop"/>
+            <field name="active" eval="False"/>
         </record>
+        -->
 
     </data>
 </odoo>

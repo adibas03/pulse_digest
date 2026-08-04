@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pulse — Detector Catalog Seed
+
+  One <record> per detector. The catalog is data, not code: vendors and v1.1+
+  modules extend it by adding more records, never by changing this file. Adding
+  a new detector in v1.1 is a pure data-XML addition + one Python class.
+
+  Field meanings:
+    name              : human-readable label shown in the configuration UI
+    technical_name    : must exactly match the detector class's TECHNICAL_NAME
+    category          : 'accounting' | 'sales' — drives UI grouping
+    detector_class    : dotted Python path that _resolve_detector_class() loads
+    dependency_modules: comma-separated; detector is hidden if any are missing
+    is_default_enabled: True -> active for new configs without admin action
+    is_statistical    : True -> surfaced separately in the UI as "may be noisy
+                        on small datasets" (conservative-defaults philosophy)
+    sequence          : display order within a category
+
+  noupdate="1" so admins editing a record (e.g. tweaking default thresholds for
+  their install) don't have their changes overwritten on module update.
+-->
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================ -->
+        <!-- Accounting detectors                                         -->
+        <!-- ============================================================ -->
+
+        <record id="detector_account_overdue_invoices" model="pulse.detector">
+            <field name="name">Overdue Invoices</field>
+            <field name="technical_name">account.overdue_invoices</field>
+            <field name="category">accounting</field>
+            <field name="sequence">10</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.account.overdue_invoices.OverdueInvoicesDetector</field>
+            <field name="dependency_modules">account</field>
+            <field name="is_default_enabled" eval="True" />
+            <field name="is_statistical" eval="False" />
+            <field name="description">Lists posted customer invoices past their due date with an
+                outstanding balance.</field>
+            <field name="rationale">Aged receivables are the single most actionable accounting
+                signal for SMEs. Surfaces specific invoices to chase, not just a total.</field>
+            <field name="default_params">{
+                "min_days_overdue": 1,
+                "min_amount": 0.0,
+                "severity_thresholds": {"warning": 30, "critical": 60}
+                }</field>
+        </record>
+
+        <record id="detector_account_payment_delay_outlier" model="pulse.detector">
+            <field name="name">Payment Delay Outliers</field>
+            <field name="technical_name">account.payment_delay_outlier</field>
+            <field name="category">accounting</field>
+            <field name="sequence">20</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.account.payment_delay_outlier.PaymentDelayOutlierDetector</field>
+            <field name="dependency_modules">account</field>
+            <field name="is_default_enabled" eval="False" />
+            <field name="is_statistical" eval="True" />
+            <field name="description">Flags customers whose latest payment delay is unusually high
+                versus their own rolling baseline.</field>
+            <field name="rationale">A customer who has paid on time for months and suddenly pays 14
+                days late is a leading indicator of cashflow trouble — long before they appear in
+                overdue reports. Statistical: needs at least ~4 prior payments per customer to
+                baseline.</field>
+            <field name="default_params">{
+                "lookback_weeks": 8,
+                "min_payments_for_baseline": 4,
+                "z_threshold": 1.5
+                }</field>
+        </record>
+
+        <record id="detector_account_credit_limit_breach" model="pulse.detector">
+            <field name="name">Credit Limit Breaches</field>
+            <field name="technical_name">account.credit_limit_breach</field>
+            <field name="category">accounting</field>
+            <field name="sequence">30</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.account.credit_limit_breach.CreditLimitBreachDetector</field>
+            <field name="dependency_modules">account</field>
+            <field name="is_default_enabled" eval="True" />
+            <field name="is_statistical" eval="False" />
+            <field name="description">Lists customers whose total outstanding balance exceeds their
+                configured credit limit.</field>
+            <field name="rationale">Credit limits exist for a reason; a breach is an explicit policy
+                violation that should be visible the morning it happens.</field>
+            <field name="default_params">{"min_breach_amount": 0.0}</field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Sales / CRM detectors                                        -->
+        <!-- ============================================================ -->
+
+        <record id="detector_sale_stale_opportunities" model="pulse.detector">
+            <field name="name">Stale Opportunities</field>
+            <field name="technical_name">sale.stale_opportunities</field>
+            <field name="category">sales</field>
+            <field name="sequence">10</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.sale.stale_opportunities.StaleOpportunitiesDetector</field>
+            <field name="dependency_modules">crm</field>
+            <field name="is_default_enabled" eval="True" />
+            <field name="is_statistical" eval="False" />
+            <field name="description">Open opportunities with no stage movement for N days.</field>
+            <field name="rationale">Deals rot quietly in mid-pipeline stages. Surfacing the ones
+                that haven't moved makes the salesperson's "what do I touch today" obvious.</field>
+            <field name="default_params">{
+                "stale_days": 14,
+                "min_expected_revenue": 0.0,
+                "severity_thresholds": {"warning": 14, "critical": 30}
+                }</field>
+        </record>
+
+        <record id="detector_sale_deals_closing_today" model="pulse.detector">
+            <field name="name">Deals Closing Today</field>
+            <field name="technical_name">sale.deals_closing_today</field>
+            <field name="category">sales</field>
+            <field name="sequence">20</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.sale.deals_closing_today.DealsClosingTodayDetector</field>
+            <field name="dependency_modules">crm</field>
+            <field name="is_default_enabled" eval="True" />
+            <field name="is_statistical" eval="False" />
+            <field name="description">Open opportunities whose expected close date is today (or
+                within a configurable horizon).</field>
+            <field name="rationale">An "act now" nudge so deadlines don't slip unnoticed.
+                Self-limiting — the window slides forward each day.</field>
+            <field name="default_params">{
+                "horizon_days": 0,
+                "min_expected_revenue": 0.0
+                }</field>
+        </record>
+
+        <record id="detector_sale_deal_velocity_drop" model="pulse.detector">
+            <field name="name">Deal Velocity Drop</field>
+            <field name="technical_name">sale.deal_velocity_drop</field>
+            <field name="category">sales</field>
+            <field name="sequence">30</field>
+            <field name="detector_class">
+                odoo.addons.pulse_digest.models.detectors.sale.deal_velocity_drop.DealVelocityDropDetector</field>
+            <field name="dependency_modules">crm</field>
+            <field name="is_default_enabled" eval="False" />
+            <field name="is_statistical" eval="True" />
+            <field name="description">Flags a salesperson whose stage-advance count this week is
+                unusually low versus their own rolling baseline.</field>
+            <field name="rationale">A rep whose pipeline activity drops vs their own norm is worth a
+                private conversation early, not a quarterly-review surprise. Statistical: needs ~4
+                weeks of baseline data per user.</field>
+            <field name="default_params">{
+                "lookback_weeks": 8,
+                "min_weeks_for_baseline": 4,
+                "z_threshold": 1.5
+                }</field>
+        </record>
+
+    </data>
+</odoo>

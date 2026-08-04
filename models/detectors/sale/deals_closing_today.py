@@ -1,11 +1,11 @@
 # detectors/sale/deals_closing_today.py
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import SEVERITY_WARNING
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
+from constants import SEVERITY_WARNING
+from _common import (
     open_opportunity_domain,
 )
-from odoo.addons.pulse_digest.models.detectors.base import (
+from detectors.base import (
     PulseDetectorBase, PulseFinding,
 )
 
