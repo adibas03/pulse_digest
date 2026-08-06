@@ -20,11 +20,11 @@ run — see _suppression_gate in pulse_config.py. The v1.1 per-recipient
 pulse.finding.state table closes this gap.
 """
 
-from constants import (
+from ...constants import (
     SEVERITY_WARNING,
     SEVERITY_CRITICAL,
 )
-from detectors.base import (
+from ..base import (
     PulseDetectorBase,
     PulseFinding,
 )

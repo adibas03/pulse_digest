@@ -62,6 +62,7 @@ class PulseDetector(models.Model):
 
     def _get_detector_class(self):
         self.ensure_one()
-        module_path, class_name = self.detector_class.rsplit(".", 1)
+        module_path, class_name = self.detector_class.strip().rsplit(".", 1)
         module = importlib.import_module(module_path)
+
         return getattr(module, class_name)

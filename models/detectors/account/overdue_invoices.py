@@ -1,12 +1,12 @@
 # detectors/account/overdue_invoices.py
 from odoo import fields
-from constants import (
+from ...constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from detectors.account._common import (
+from ._common import (
     customer_invoice_domain,
 )
-from detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
 )
 

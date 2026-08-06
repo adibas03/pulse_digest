@@ -2,13 +2,13 @@
 import statistics
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.account._common import (
+from ._common import (
     customer_invoice_domain,
 )
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
 )
 

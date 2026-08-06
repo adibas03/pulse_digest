@@ -41,11 +41,13 @@
                 outstanding balance.</field>
             <field name="rationale">Aged receivables are the single most actionable accounting
                 signal for SMEs. Surfaces specific invoices to chase, not just a total.</field>
-            <field name="default_params">{
-                "min_days_overdue": 1,
-                "min_amount": 0.0,
-                "severity_thresholds": {"warning": 30, "critical": 60}
-                }</field>
+            <field name="default_params"
+                eval="{
+                'min_days_overdue': 1,
+                'min_amount': 0.0,
+                'severity_thresholds': {'warning': 30, 'critical': 60},
+                }" />
+
         </record>
 
         <record id="detector_account_payment_delay_outlier" model="pulse.detector">
@@ -64,11 +66,12 @@
                 days late is a leading indicator of cashflow trouble — long before they appear in
                 overdue reports. Statistical: needs at least ~4 prior payments per customer to
                 baseline.</field>
-            <field name="default_params">{
-                "lookback_weeks": 8,
-                "min_payments_for_baseline": 4,
-                "z_threshold": 1.5
-                }</field>
+            <field name="default_params"
+                eval="{
+                'lookback_weeks': 8,
+                'min_payments_for_baseline': 4,
+                'z_threshold': 1.5,
+                }" />
         </record>
 
         <record id="detector_account_credit_limit_breach" model="pulse.detector">
@@ -85,7 +88,7 @@
                 configured credit limit.</field>
             <field name="rationale">Credit limits exist for a reason; a breach is an explicit policy
                 violation that should be visible the morning it happens.</field>
-            <field name="default_params">{"min_breach_amount": 0.0}</field>
+            <field name="default_params" eval="{'min_breach_amount': 0.0}" />
         </record>
 
         <!-- ============================================================ -->
@@ -105,11 +108,12 @@
             <field name="description">Open opportunities with no stage movement for N days.</field>
             <field name="rationale">Deals rot quietly in mid-pipeline stages. Surfacing the ones
                 that haven't moved makes the salesperson's "what do I touch today" obvious.</field>
-            <field name="default_params">{
-                "stale_days": 14,
-                "min_expected_revenue": 0.0,
-                "severity_thresholds": {"warning": 14, "critical": 30}
-                }</field>
+            <field name="default_params"
+                eval="{
+                'stale_days': 14,
+                'min_expected_revenue': 0.0,
+                'severity_thresholds': {'warning': 14, 'critical': 30}
+                }" />
         </record>
 
         <record id="detector_sale_deals_closing_today" model="pulse.detector">
@@ -126,10 +130,11 @@
                 within a configurable horizon).</field>
             <field name="rationale">An "act now" nudge so deadlines don't slip unnoticed.
                 Self-limiting — the window slides forward each day.</field>
-            <field name="default_params">{
-                "horizon_days": 0,
-                "min_expected_revenue": 0.0
-                }</field>
+            <field name="default_params"
+                eval="{
+                'horizon_days': 0,
+                'min_expected_revenue': 0.0
+                }" />
         </record>
 
         <record id="detector_sale_deal_velocity_drop" model="pulse.detector">
@@ -147,11 +152,12 @@
             <field name="rationale">A rep whose pipeline activity drops vs their own norm is worth a
                 private conversation early, not a quarterly-review surprise. Statistical: needs ~4
                 weeks of baseline data per user.</field>
-            <field name="default_params">{
-                "lookback_weeks": 8,
-                "min_weeks_for_baseline": 4,
-                "z_threshold": 1.5
-                }</field>
+            <field name="default_params"
+                eval="{
+                'lookback_weeks': 8,
+                'min_weeks_for_baseline': 4,
+                'z_threshold': 1.5
+                }" />
         </record>
 
     </data>

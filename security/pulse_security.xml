@@ -31,16 +31,16 @@
         <!-- Module Priviledge (display grouping under Settings → Users)    -->
         <!-- ============================================================ -->
 
-        <!-- <record id="pulse_privilege" model="res.groups.privilege">
-            <field name="name">Pulse Privilege</field>
-            <field name="category_id" ref="base.module_category_pulse" />
+        <record model="ir.module.category" id="module_category_pulse">
+            <field name="name">Pulse</field>
+            <field name="description">Daily exception digest with anomaly detection.</field>
+            <field name="sequence">20</field>
         </record>
 
-        <record model="ir.module.category" id="module_category_user_type">
-            <field name="name">User types</field>
-            <field name="description">Helps you manage users.</field>
-            <field name="sequence">9</field>
-        </record> -->
+        <record id="pulse_privilege" model="res.groups.privilege">
+            <field name="name">Pulse Privilege</field>
+            <field name="category_id" ref="module_category_pulse" />
+        </record>
 
         <!-- ============================================================ -->
         <!-- Groups                                                       -->
@@ -48,7 +48,7 @@
 
         <record id="group_pulse_recipient" model="res.groups">
             <field name="name">Recipient</field>
-            <!-- <field name="privilege_id" ref="pulse_privilege" /> -->
+            <field name="privilege_id" ref="pulse_privilege" />
             <!-- <field name="user_ids" eval="[(4, ref('base.user_ids'))]" /> -->
             <field name="comment">Receives the Pulse daily digest. Can read own runs and findings,
                 and edit own channel preferences.</field>
@@ -56,7 +56,7 @@
 
         <record id="group_pulse_admin" model="res.groups">
             <field name="name">Administrator</field>
-            <!-- <field name="privilege_id" ref="pulse_privilege" /> -->
+            <field name="privilege_id" ref="pulse_privilege" />
             <field name="implied_ids" eval="[(4, ref('group_pulse_recipient'))]" />
             <field name="user_ids" eval="[(4, ref('base.user_admin'))]" />
             <field name="comment">Configures detectors, recipient lists, schedules. Sees all runs
