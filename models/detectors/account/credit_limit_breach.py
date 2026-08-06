@@ -71,7 +71,6 @@ class CreditLimitBreachDetector(PulseDetectorBase):
         # partners with no current AR; the comparison against credit_limit
         # happens per record below.
         domain = [
-            ("use_partner_credit_limit", "=", True),
             ("credit_limit", ">", 0),
             ("credit", ">", 0),
         ]

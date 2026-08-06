@@ -108,7 +108,7 @@ class PulseConfig(models.Model):
         for line in lines:
             detector_id = line.detector_id
             detector_cls = detector_id._get_detector_class()
-            params = {**detector_id.default_params, **line.params}
+            params = {**detector_id.default_params, **(line.params or {})}
             detector = detector_cls(params=params)
             for finding in detector.compute(self.env, scope):
                 self.env["pulse.run.line"].create({
@@ -225,8 +225,7 @@ class PulseConfig(models.Model):
         else:
             self.run_all_audiences(force=True)
 
-        domain = [("config_id", "=", self.id)]
-        if audience == "user":
-            domain.append(("user_id", "=", user_id))
+        domain_extra = [("user_id", "=", user_id)
+                        ] if audience == "user" else None
 
-        return self._runs_action()
+        return self._runs_action(domain_extra)
