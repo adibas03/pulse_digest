@@ -1,9 +1,5 @@
 import pytz
 from odoo import api, models, fields
-from . import pulse_run
-from . import pulse_detector
-from . import pulse_config_detector
-from . import pulse_channel
 from .detectors.base import Scope
 
 
@@ -82,6 +78,21 @@ class PulseConfig(models.Model):
         )
         return duplicates
 
+    def _suppression_gate(self, detector_cls, finding):
+        """v1 suppression: branches on SUPPRESSIBLE/AGE_FIELD, but without a
+        per-recipient state store (pulse.finding.state, v1.1) there's nothing to
+        check history against yet, so every branch still delivers. v1.1 replaces
+        the last branch with a real lookup once that store exists."""
+        if not detector_cls.SUPPRESSIBLE:
+            return True  # detector doesn't participate in suppression at all
+
+        if detector_cls.AGE_FIELD is None:
+            return True  # opted in, but no "since" signal to suppress against
+
+        # SUPPRESSIBLE and has an AGE_FIELD — this is the v1.1 seam: real
+        # suppression logic (pulse.finding.state lookup) belongs here.
+        return True
+
     def run_digest(self, audience, user=None, force=False):
         """Execute all active, available detectors for one audience and persist
         the results as a pulse.run + pulse.run.line records."""
@@ -111,6 +122,8 @@ class PulseConfig(models.Model):
             params = {**detector_id.default_params, **(line.params or {})}
             detector = detector_cls(params=params)
             for finding in detector.compute(self.env, scope):
+                if not self._suppression_gate(detector_cls, finding):
+                    continue
                 self.env["pulse.run.line"].create({
                     "run_id": run.id,
                     "detector_id": detector_id.id,
@@ -138,7 +151,7 @@ class PulseConfig(models.Model):
         if self.digest_mode in ("company", "both"):
             self.run_digest("company", force=force)
         if self.digest_mode in ("per_user", "both"):
-            for user in self.user_group_id.user_ids:
+            for user in self.user_group_id.all_user_ids:
                 self.run_digest("user", user=user, force=force)
 
     def _cron_is_due(self, now_utc):

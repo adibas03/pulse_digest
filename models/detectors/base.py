@@ -38,6 +38,8 @@ class PulseDetectorBase:
 
     TECHNICAL_NAME = None
     DEFAULT_PARAMS = {}
+    SUPPRESSIBLE = False
+    AGE_FIELD = None
 
     def __init__(self, params=None):
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
@@ -89,8 +91,6 @@ class Scope:
 
     USER = "user"
     COMPANY = "company"
-
-    # __slots__ = ("kind", "company", "user")
 
     def __init__(self, kind, company=None, user=None):
         if kind not in (self.USER, self.COMPANY):
