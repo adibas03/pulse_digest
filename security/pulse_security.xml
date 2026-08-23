@@ -46,22 +46,48 @@
         <!-- Groups                                                       -->
         <!-- ============================================================ -->
 
+
+        <record id="group_pulse_viewer" model="res.groups">
+            <field name="name">Viewer</field>
+            <field name="privilege_id" ref="pulse_privilege" />
+            <field name="comment">Can see Pulse configuration and the detector catalog
+                (read-only). Granted automatically to every internal user.</field>
+        </record>
+
+
         <record id="group_pulse_recipient" model="res.groups">
             <field name="name">Recipient</field>
             <field name="privilege_id" ref="pulse_privilege" />
-            <!-- <field name="user_ids" eval="[(4, ref('base.user_ids'))]" /> -->
+            <field name="implied_ids" eval="[(4, ref('group_pulse_viewer'))]" />
+            <!-- <field name="user_ids" eval="[(4, ref('base.user_demo'))]" /> -->
             <field name="comment">Receives the Pulse daily digest. Can read own runs and findings,
                 and edit own channel preferences.</field>
         </record>
+
 
         <record id="group_pulse_admin" model="res.groups">
             <field name="name">Administrator</field>
             <field name="privilege_id" ref="pulse_privilege" />
             <field name="implied_ids" eval="[(4, ref('group_pulse_recipient'))]" />
-            <field name="user_ids" eval="[(4, ref('base.user_admin'))]" />
+            <!-- <field name="user_ids" eval="[(4, ref('base.user_admin'))]" /> -->
             <field name="comment">Configures detectors, recipient lists, schedules. Sees all runs
                 and findings across the company.</field>
         </record>
+
+        <record id="base.group_user" model="res.groups">
+            <field name="implied_ids" eval="[(4, ref('group_pulse_viewer'))]" />
+        </record>
+
+
+        <!-- ============================================================ -->
+        <!-- Demo user                                                 -->
+        <!-- ============================================================ -->
+
+
+        <!-- <record id="base.user_demo" model="res.users">
+            <field name="groups_id" eval="[(4, ref('group_pulse_recipient'))]" />
+        </record> -->
+
 
         <!-- ============================================================ -->
         <!-- Record rules                                                 -->

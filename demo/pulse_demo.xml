@@ -23,6 +23,18 @@
     <data noupdate="1">
 
         <!-- ============================================================ -->
+        <!-- Demo user access                                             -->
+        <!-- ============================================================ -->
+
+        <!-- Grants the standard Odoo demo user (Marc Demo) recipient access
+             so a reviewer logged in as demo can see Pulse runs/findings
+             without needing admin. -->
+
+        <!-- <record id="base.user_demo" model="res.users">
+            <field name="groups_id" eval="[(4, ref('group_pulse_recipient'))]" />
+        </record> -->
+
+        <!-- ============================================================ -->
         <!-- Demo Pulse config                                            -->
         <!-- ============================================================ 
 

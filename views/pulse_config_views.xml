@@ -9,9 +9,11 @@
                 <form string="Pulse Configuration">
                     <header>
                         <button name="action_run_now" type="object"
-                            string="Run Now" class="oe_highlight" />
+                            string="Run Now" class="oe_highlight"
+                            groups="pulse_digest.group_pulse_admin" />
                         <button name="action_view_runs" type="object" string="History"
-                            class="btn-secondary" />
+                            class="btn-secondary"
+                            groups="pulse_digest.group_pulse_recipient" />
                     </header>
                     <sheet>
                         <group>
