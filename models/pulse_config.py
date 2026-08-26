@@ -1,6 +1,9 @@
 import pytz
 from odoo import api, models, fields
+import logging
 from .detectors.base import Scope
+
+_logger = logging.getLogger(__name__)
 
 
 def _tz_get(self):
@@ -116,33 +119,41 @@ class PulseConfig(models.Model):
         lines = self.detector_line_ids.filtered(
             lambda l: l.active and l.detector_id.is_available)
 
-        for line in lines:
-            detector_id = line.detector_id
-            detector_cls = detector_id._get_detector_class()
-            params = {**detector_id.default_params, **(line.params or {})}
-            detector = detector_cls(params=params)
-            for finding in detector.compute(self.env, scope):
-                if not self._suppression_gate(detector_cls, finding):
-                    continue
-                self.env["pulse.run.line"].create({
-                    "run_id": run.id,
-                    "detector_id": detector_id.id,
-                    "res_model": finding.res_model,
-                    "res_id": finding.res_id,
-                    "res_name": finding.res_name,
-                    "severity": finding.severity,
-                    "summary": finding.summary,
-                    "detail": finding.detail,
-                    "metric_value": finding.metric_value or 0.0,
-                    "baseline_value": finding.baseline_value or 0.0,
-                    "deviation": finding.deviation or 0.0,
-                })
+        try:
+            for line in lines:
+                detector_id = line.detector_id
+                detector_cls = detector_id._get_detector_class()
+                params = {**detector_id.default_params, **(line.params or {})}
+                detector = detector_cls(params=params)
+                for finding in detector.compute(self.env, scope):
+                    if not self._suppression_gate(detector_cls, finding):
+                        continue
+                    self.env["pulse.run.line"].create({
+                        "run_id": run.id,
+                        "detector_id": detector_id.id,
+                        "res_model": finding.res_model,
+                        "res_id": finding.res_id,
+                        "res_name": finding.res_name,
+                        "severity": finding.severity,
+                        "summary": finding.summary,
+                        "detail": finding.detail,
+                        "metric_value": finding.metric_value or 0.0,
+                        "baseline_value": finding.baseline_value or 0.0,
+                        "deviation": finding.deviation or 0.0,
+                    })
 
-        run.write({
-            "status": "done",
-            "finished_at": fields.Datetime.now(),
-            "duration_ms": int((fields.Datetime.now() - run.started_at).total_seconds() * 1000),
-        })
+            run.write({
+                "status": "done",
+                "finished_at": fields.Datetime.now(),
+                "duration_ms": int((fields.Datetime.now() - run.started_at).total_seconds() * 1000),
+            })
+        except Exception as e:
+            run.write({
+                "status": "failed",
+                "error_message": str(e),
+                "finished_at": fields.Datetime.now(),
+            })
+            raise
         return run
 
     def run_all_audiences(self, force=False):
@@ -178,7 +189,11 @@ class PulseConfig(models.Model):
         now_utc = fields.Datetime.now()
         for config in self.search([("active", "=", True)]):
             if config._cron_is_due(now_utc):
-                config.run_all_audiences()
+                try:
+                    config.run_all_audiences()
+                except Exception:
+                    _logger.exception(
+                        "Pulse run failed for config %s", config.id)
 
     def _runs_action(self, domain_extra=None):
         """Single source of truth for 'open this config's pulse.run records.'

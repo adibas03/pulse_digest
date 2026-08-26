@@ -1,5 +1,4 @@
 from odoo import models, fields, api
-from . import pulse_run_line
 
 
 class PulseRun(models.Model):

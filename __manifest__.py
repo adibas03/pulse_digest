@@ -33,13 +33,13 @@ by email, in-app notification, or WhatsApp.
 
     # always loaded
     'data': [
+        'security/pulse_security.xml',
+        'security/ir.model.access.csv',
         "views/pulse_config_views.xml",
         "views/pulse_run_views.xml",
         # 'views/pulse_detector_views.xml',
         'views/views.xml',
         # 'views/templates.xml',
-        'security/pulse_security.xml',
-        'security/ir.model.access.csv',
         'data/pulse_detector_data.xml',
         'data/pulse_cron_data.xml',
     ],
