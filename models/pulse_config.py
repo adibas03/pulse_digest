@@ -123,7 +123,8 @@ class PulseConfig(models.Model):
             for line in lines:
                 detector_id = line.detector_id
                 detector_cls = detector_id._get_detector_class()
-                params = {**detector_id.default_params, **(line.params or {})}
+                params = {**(detector_id.default_params or {}),
+                          **(line.params or {})}
                 detector = detector_cls(params=params)
                 for finding in detector.compute(self.env, scope):
                     if not self._suppression_gate(detector_cls, finding):

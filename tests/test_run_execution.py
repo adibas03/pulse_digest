@@ -134,9 +134,11 @@ class TestRunExecution(PulseTransactionCase):
         self.assertIn("boom", run.error_message)
 
     def test_cron_run_digests_isolates_failure_per_config(self):
+        other_company = self.env["res.company"].create(
+            {"name": "Other Company"})
         other_config = self.env["pulse.config"].create({
             "name": "Other Config",
-            "company_id": self.env.company.id,
+            "company_id": other_company.id,
             "digest_mode": "company",
             "run_time": self.config.run_time,
             "timezone": self.config.timezone,

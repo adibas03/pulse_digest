@@ -1,7 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 # run-tests.sh — usage: ./run-tests.sh [test-tags]
 
-set -euo pipefail
+set -eux
 TAGS="${1:-/pulse_digest}"
 DB_ARGS="--db_host db --db_user odoo --db_password odoo"
 

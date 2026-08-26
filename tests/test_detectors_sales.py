@@ -10,6 +10,9 @@ from odoo.addons.pulse_digest.models.constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
 from odoo.addons.pulse_digest.models.detectors.base import Scope
+from odoo.addons.pulse_digest.models.detectors.sale._common import (
+    _DEFAULT_PARAMS,
+)
 from odoo.addons.pulse_digest.models.detectors.sale.stale_opportunities import (
     StaleOpportunitiesDetector,
 )
@@ -39,8 +42,8 @@ class SalesDetectorCase(TransactionCase):
         self.today = fields.Date.context_today(self.env.user)
 
     def _make_lead(self, date_last_stage_update, date_deadline=None,
-                    expected_revenue=1000.0, user_id=None, stage=None,
-                    active=True):
+                   expected_revenue=1000.0, user_id=None, stage=None,
+                   active=True):
         return self.env["crm.lead"].create({
             "name": "Test Opportunity",
             "type": "opportunity",
@@ -88,12 +91,16 @@ class TestStaleOpportunitiesDetector(SalesDetectorCase):
         self.assertNotIn(lead.id, [f.res_id for f in findings])
 
     def test_severity_buckets(self):
+        warn_threshold = _DEFAULT_PARAMS[StaleOpportunitiesDetector.TECHNICAL_NAME]["severity_thresholds"].get(
+            SEVERITY_WARNING)
+        crit_threshold = _DEFAULT_PARAMS[StaleOpportunitiesDetector.TECHNICAL_NAME]["severity_thresholds"].get(
+            SEVERITY_CRITICAL)
         low = self._make_lead(
-            date_last_stage_update=self.today - relativedelta(days=15))
+            date_last_stage_update=self.today - relativedelta(days=warn_threshold-1))
         warning = self._make_lead(
-            date_last_stage_update=self.today - relativedelta(days=20))
+            date_last_stage_update=self.today - relativedelta(days=warn_threshold + 5))
         critical = self._make_lead(
-            date_last_stage_update=self.today - relativedelta(days=40))
+            date_last_stage_update=self.today - relativedelta(days=crit_threshold + 10))
 
         detector = StaleOpportunitiesDetector()
         by_id = {f.res_id: f
@@ -173,7 +180,8 @@ class TestDealVelocityDropDetector(SalesDetectorCase):
 
     def _touch(self, user, weeks_ago):
         self._make_lead(
-            date_last_stage_update=self.today - relativedelta(weeks=weeks_ago),
+            date_last_stage_update=self.today -
+            relativedelta(weeks=weeks_ago),
             user_id=user)
 
     def test_insufficient_baseline_produces_no_findings(self):
