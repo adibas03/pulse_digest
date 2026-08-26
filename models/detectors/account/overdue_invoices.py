@@ -4,6 +4,7 @@ from ...constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
 from ._common import (
+    _DEFAULT_PARAMS,
     customer_invoice_domain,
 )
 from ..base import (
@@ -13,14 +14,7 @@ from ..base import (
 
 class OverdueInvoicesDetector(PulseDetectorBase):
     TECHNICAL_NAME = "account.overdue_invoices"
-    DEFAULT_PARAMS = {
-        "min_days_overdue": 1,
-        "min_amount": 0.0,
-        "severity_thresholds": {
-            SEVERITY_WARNING: 30,    # >= 30 days overdue -> warning
-            SEVERITY_CRITICAL: 60,   # >= 60 days overdue -> critical
-        },
-    }
+    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
 
     def compute(self, env, scope):
         self.validate_severity_thresholds(self.params["severity_thresholds"])

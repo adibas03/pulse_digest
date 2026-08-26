@@ -7,6 +7,7 @@ from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
 from ._common import (
+    _DEFAULT_PARAMS,
     open_opportunity_domain,
 )
 from ..base import (
@@ -24,11 +25,7 @@ class DealVelocityDropDetector(PulseDetectorBase):
     """
 
     TECHNICAL_NAME = "sale.deal_velocity_drop"
-    DEFAULT_PARAMS = {
-        "lookback_weeks": 8,
-        "min_weeks_for_baseline": 4,
-        "z_threshold": 1.5,
-    }
+    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
 
     def compute(self, env, scope):
         weeks = self.params["lookback_weeks"]

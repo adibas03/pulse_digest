@@ -19,6 +19,8 @@ run — see _suppression_gate in pulse_config.py. The v1.1 per-recipient
 pulse.finding.state table closes this gap.
 """
 
+from ._common import DEFAULT_PARAMS as _DEAULT_PARAMS
+
 from ...constants import (
     SEVERITY_WARNING,
     SEVERITY_CRITICAL,
@@ -42,19 +44,7 @@ class CreditLimitBreachDetector(PulseDetectorBase):
     SUPPRESSIBLE = True
     AGE_FIELD = None
 
-    DEFAULT_PARAMS = {
-        # Don't flag breaches below this absolute amount (in partner currency).
-        # Useful to ignore rounding-noise breaches like 0.01 over limit.
-        "min_breach_amount": 0.0,
-        # Severity is driven by HOW FAR over limit, expressed as a fraction
-        # of the limit itself. 0.10 = 10% over -> warning, 0.25 -> critical.
-        "severity_thresholds": {
-            # Fraction of credit_limit by which `credit` exceeds it.
-            # 0.10 = 10% over -> warning; 0.25 = 25% over -> critical.
-            SEVERITY_WARNING: 0.10,
-            SEVERITY_CRITICAL: 0.25,
-        },
-    }
+    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
 
     def compute(self, env, scope):
         self.validate_severity_thresholds(self.params["severity_thresholds"])
