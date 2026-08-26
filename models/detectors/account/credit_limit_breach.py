@@ -9,7 +9,6 @@ accounting detectors, this one queries res.partner rather than account.move
 API status (verified Nov 2025 against odoo/odoo@19.0 source):
     - `credit` (computed: current outstanding AR balance on res.partner)
     - `credit_limit` (admin-configured threshold on res.partner)
-    - `use_partner_credit_limit` (boolean gating toggle on res.partner)
     All three confirmed as the correct 19.0 field names. No further verification
     needed.
 

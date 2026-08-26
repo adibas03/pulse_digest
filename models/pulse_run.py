@@ -1,4 +1,4 @@
-from odoo import models, fields
+from odoo import models, fields, api
 from . import pulse_run_line
 
 
@@ -35,3 +35,8 @@ class PulseRun(models.Model):
     email_sent = fields.Boolean()
     inapp_sent = fields.Boolean()
     whatsapp_sent = fields.Boolean()
+
+    @api.depends("line_ids")
+    def _compute_line_count(self):
+        for run in self:
+            run.line_count = len(run.line_ids)
