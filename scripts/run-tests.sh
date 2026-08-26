@@ -1,0 +1,13 @@
+#!/bin/sh
+# run-tests.sh — usage: ./run-tests.sh [test-tags]
+
+set -euo pipefail
+TAGS="${1:-/pulse_digest}"
+DB_ARGS="--db_host db --db_user odoo --db_password odoo"
+
+odoo db $DB_ARGS drop pulse_test || true
+
+odoo -d pulse_test -i pulse_digest \
+  --test-enable --test-tags "$TAGS" \
+  --stop-after-init --max-cron-threads=0 --log-level=test \
+  $DB_ARGS -p 8068
