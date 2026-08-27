@@ -10,9 +10,6 @@ from odoo.addons.pulse_digest.models.constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
 from odoo.addons.pulse_digest.models.detectors.base import Scope
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
-    _DEFAULT_PARAMS,
-)
 from odoo.addons.pulse_digest.models.detectors.sale.stale_opportunities import (
     StaleOpportunitiesDetector,
 )
@@ -91,9 +88,9 @@ class TestStaleOpportunitiesDetector(SalesDetectorCase):
         self.assertNotIn(lead.id, [f.res_id for f in findings])
 
     def test_severity_buckets(self):
-        warn_threshold = _DEFAULT_PARAMS[StaleOpportunitiesDetector.TECHNICAL_NAME]["severity_thresholds"].get(
+        warn_threshold = StaleOpportunitiesDetector.DEFAULT_PARAMS["severity_thresholds"].get(
             SEVERITY_WARNING)
-        crit_threshold = _DEFAULT_PARAMS[StaleOpportunitiesDetector.TECHNICAL_NAME]["severity_thresholds"].get(
+        crit_threshold = StaleOpportunitiesDetector.DEFAULT_PARAMS["severity_thresholds"].get(
             SEVERITY_CRITICAL)
         low = self._make_lead(
             date_last_stage_update=self.today - relativedelta(days=warn_threshold-1))

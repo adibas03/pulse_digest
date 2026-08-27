@@ -2,18 +2,18 @@
 from dateutil.relativedelta import relativedelta
 from odoo import fields
 from ...constants import SEVERITY_WARNING
-from ._common import (
-    _DEFAULT_PARAMS,
-    open_opportunity_domain,
-)
 from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class DealsClosingTodayDetector(PulseDetectorBase):
     TECHNICAL_NAME = "sale.deals_closing_today"
-    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
+    DEFAULT_PARAMS = {
+        "horizon_days": 0,   # 0 = today only; N = today through today+N
+        "min_expected_revenue": 0.0,
+    }
 
     def compute(self, env, scope):
         today = fields.Date.context_today(env.user)

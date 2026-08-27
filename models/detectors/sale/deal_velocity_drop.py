@@ -6,13 +6,10 @@ from odoo import fields
 from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from ._common import (
-    _DEFAULT_PARAMS,
-    open_opportunity_domain,
-)
 from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class DealVelocityDropDetector(PulseDetectorBase):
@@ -25,7 +22,11 @@ class DealVelocityDropDetector(PulseDetectorBase):
     """
 
     TECHNICAL_NAME = "sale.deal_velocity_drop"
-    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
+    DEFAULT_PARAMS = {
+        "lookback_weeks": 8,
+        "min_weeks_for_baseline": 4,
+        "z_threshold": 1.5,
+    }
 
     def compute(self, env, scope):
         weeks = self.params["lookback_weeks"]

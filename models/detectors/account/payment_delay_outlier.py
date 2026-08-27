@@ -5,12 +5,11 @@ from odoo import fields
 from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from .constants import DEFAULT_PARAMS as _DEFAULT_PARAMS, TECHNICAL_NAMES
-from ._common import (
-    customer_invoice_domain,
-)
 from ..base import (
     PulseDetectorBase, PulseFinding,
+)
+from ._common import (
+    customer_invoice_domain,
 )
 
 
@@ -19,7 +18,11 @@ class PaymentDelayOutlierDetector(PulseDetectorBase):
     own 8-week rolling mean."""
 
     TECHNICAL_NAME = "account.payment_delay_outlier"
-    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
+    DEFAULT_PARAMS = {
+        "lookback_weeks": 8,
+        "min_payments_for_baseline": 4,
+        "z_threshold": 1.5,
+    }
 
     def compute(self, env, scope):
         # Find customers with paid invoices in the last week

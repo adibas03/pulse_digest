@@ -4,18 +4,22 @@ from odoo import fields
 from ...constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from ._common import (
-    _DEFAULT_PARAMS,
-    open_opportunity_domain,
-)
 from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class StaleOpportunitiesDetector(PulseDetectorBase):
     TECHNICAL_NAME = "sale.stale_opportunities"
-    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
+    DEFAULT_PARAMS = {
+        "stale_days": 14,
+        "min_expected_revenue": 0.0,
+        "severity_thresholds": {
+            SEVERITY_WARNING: 14,    # >= 14 days stale -> warning
+            SEVERITY_CRITICAL: 30,   # >= 30 days stale -> critical
+        },
+    }
 
     def compute(self, env, scope):
         self.validate_severity_thresholds(self.params["severity_thresholds"])

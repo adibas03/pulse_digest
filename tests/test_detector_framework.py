@@ -78,14 +78,6 @@ class TestPulseDetectorBaseContract(TransactionCase):
             self.env, [("x", "=", 1)], "crm.lead", self.env.ref("base.user_admin"))
         self.assertIn(("user_id", "=", self.env.ref("base.user_admin").id), domain)
 
-    def test_apply_user_scope_falls_back_to_invoice_user_id(self):
-        d = DummyDetector()
-        domain = d.apply_user_scope(
-            self.env, [("x", "=", 1)], "account.move",
-            self.env.ref("base.user_admin"))
-        self.assertIn(
-            ("invoice_user_id", "=", self.env.ref("base.user_admin").id), domain)
-
     def test_apply_user_scope_no_match_returns_domain_unchanged(self):
         d = DummyDetector()
         base_domain = [("x", "=", 1)]

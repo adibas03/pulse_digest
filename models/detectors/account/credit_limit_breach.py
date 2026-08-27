@@ -9,7 +9,7 @@ accounting detectors, this one queries res.partner rather than account.move
 API status (verified Nov 2025 against odoo/odoo@19.0 source):
     - `credit` (computed: current outstanding AR balance on res.partner)
     - `credit_limit` (admin-configured threshold on res.partner)
-    All three confirmed as the correct 19.0 field names. No further verification
+    The two confirmed as the correct 19.0 field names. No further verification
     needed.
 
 Suppression behaviour: SUPPRESSIBLE = True (a partner can sit over limit day
@@ -19,7 +19,6 @@ run — see _suppression_gate in pulse_config.py. The v1.1 per-recipient
 pulse.finding.state table closes this gap.
 """
 
-from ._common import DEFAULT_PARAMS as _DEAULT_PARAMS
 
 from ...constants import (
     SEVERITY_WARNING,
@@ -44,7 +43,19 @@ class CreditLimitBreachDetector(PulseDetectorBase):
     SUPPRESSIBLE = True
     AGE_FIELD = None
 
-    DEFAULT_PARAMS = _DEFAULT_PARAMS.get(TECHNICAL_NAME, {})
+    DEFAULT_PARAMS = {
+        # Don't flag breaches below this absolute amount (in partner currency).
+        # Useful to ignore rounding-noise breaches like 0.01 over limit.
+        "min_breach_amount": 0.0,
+        # Severity is driven by HOW FAR over limit, expressed as a fraction
+        # of the limit itself. 0.10 = 10% over -> warning, 0.25 -> critical.
+        "severity_thresholds": {
+            # Fraction of credit_limit by which `credit` exceeds it.
+            # 0.10 = 10% over -> warning; 0.25 = 25% over -> critical.
+            SEVERITY_WARNING: 0.10,
+            SEVERITY_CRITICAL: 0.25,
+        },
+    }
 
     def compute(self, env, scope):
         self.validate_severity_thresholds(self.params["severity_thresholds"])
