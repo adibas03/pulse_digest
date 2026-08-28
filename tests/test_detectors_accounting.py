@@ -34,6 +34,13 @@ class AccountingDetectorCase(AccountTestInvoicingCommon):
     def setUpClass(cls):
         super().setUpClass()
         cls.scope_company = Scope.company(cls.company_data["company"])
+        cls.salesperson = cls.env["res.users"].create({
+            "name": "Test Salesperson",
+            "login": "test_salesperson_accounting",
+            "email": "test_salesperson_accounting@example.com",
+            "company_id": cls.company_data["company"].id,
+            "company_ids": [(6, 0, [cls.company_data["company"].id])],
+        })
 
     def setUp(self):
         super().setUp()
@@ -50,6 +57,9 @@ class AccountingDetectorCase(AccountTestInvoicingCommon):
             "partner_id": partner.id,
             "invoice_date": invoice_date,
             "invoice_date_due": due_date,
+            # Without this, the default payment term silently recomputes
+            # invoice_date_due from invoice_date, overriding what we pass in.
+            "invoice_payment_term_id": False,
             "invoice_user_id": salesperson.id if salesperson else False,
             "invoice_line_ids": [(0, 0, {
                 "name": "Test line",
@@ -72,8 +82,11 @@ class AccountingDetectorCase(AccountTestInvoicingCommon):
             "date": move.invoice_date_due,
         })
         payment.action_post()
+        # Target the receivable account specifically — move.line_ids includes
+        # both the revenue line (not reconcilable) and the receivable line;
+        # picking "whichever account comes first" risks grabbing the wrong one.
         (move.line_ids + payment.move_id.line_ids).filtered(
-            lambda l: l.account_id == move.line_ids.mapped("account_id")[:1]
+            lambda l: l.account_id.account_type == "asset_receivable"
             and not l.reconciled
         ).reconcile()
         return payment
@@ -239,11 +252,11 @@ class TestCreditLimitBreachDetector(AccountingDetectorCase):
         self.assertIn(self.partner_a.id, [f.res_id for f in company_findings])
 
         user_findings = list(detector.compute(
-            self.env, Scope.user(self.env.ref("base.user_admin"))))
+            self.env, Scope.user(self.salesperson)))
         self.assertNotIn(self.partner_a.id, [f.res_id for f in user_findings])
 
     def test_assigned_salesperson_included_in_per_user_digest(self):
-        salesperson = self.env.ref("base.user_admin")
+        salesperson = self.salesperson
         self.partner_a.write({
             "use_partner_credit_limit": True,
             "credit_limit": 50.0,

@@ -8,10 +8,10 @@ DB_ARGS="--db_host db --db_user odoo --db_password odoo"
 
 odoo db $DB_ARGS drop pulse_test || true
 
-odoo -d pulse_test   -i pulse_digest   --test-enable   --test-tags /pulse_digest   --stop-after-init   --max-cron-threads=0   --log-level=test --db_host=db --db_user=odoo --db_password=odoo -p 8068
+# odoo -d pulse_test   -i pulse_digest   --test-enable   --test-tags /pulse_digest   --stop-after-init   --max-cron-threads=0   --log-level=test --db_host=db --db_user=odoo --db_password=odoo -p 8068
 
 
-# odoo -d pulse_test -i pulse_digest \
-#   --test-enable --test-tags "$TAGS" \
-#   --stop-after-init --max-cron-threads=0 --log-level=test \
-#   $DB_ARGS -p 8068
+odoo -d pulse_test -i pulse_digest \
+  --test-enable --test-tags "$TAGS" \
+  --stop-after-init --max-cron-threads=0 --log-level=test \
+  $DB_ARGS -p 8068

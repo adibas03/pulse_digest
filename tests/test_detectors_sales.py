@@ -88,18 +88,23 @@ class TestStaleOpportunitiesDetector(SalesDetectorCase):
         self.assertNotIn(lead.id, [f.res_id for f in findings])
 
     def test_severity_buckets(self):
+        # Under the shipped defaults, stale_days (14) equals
+        # severity_thresholds[WARNING] (14) — the domain's own entry
+        # threshold already exceeds the WARNING bucket, so INFO severity is
+        # unreachable at default params. Override stale_days down so there's
+        # an actual window between "qualifies at all" and "warning."
         warn_threshold = StaleOpportunitiesDetector.DEFAULT_PARAMS["severity_thresholds"].get(
             SEVERITY_WARNING)
         crit_threshold = StaleOpportunitiesDetector.DEFAULT_PARAMS["severity_thresholds"].get(
             SEVERITY_CRITICAL)
         low = self._make_lead(
-            date_last_stage_update=self.today - relativedelta(days=warn_threshold-1))
+            date_last_stage_update=self.today - relativedelta(days=warn_threshold - 4))
         warning = self._make_lead(
             date_last_stage_update=self.today - relativedelta(days=warn_threshold + 5))
         critical = self._make_lead(
             date_last_stage_update=self.today - relativedelta(days=crit_threshold + 10))
 
-        detector = StaleOpportunitiesDetector()
+        detector = StaleOpportunitiesDetector(params={"stale_days": 5})
         by_id = {f.res_id: f
                  for f in detector.compute(self.env, self.scope_company)}
         self.assertEqual(by_id[low.id].severity, SEVERITY_INFO)

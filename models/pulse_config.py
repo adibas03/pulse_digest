@@ -110,16 +110,17 @@ class PulseConfig(models.Model):
         company = user.company_id if user else self.company_id
         scope = Scope.user(user) if user else Scope.company(company)
 
-        run = self.env["pulse.run"].create({
-            "config_id": self.id,
-            "audience": audience,
-            "user_id": user.id if user else False,
-        })
-
-        lines = self.detector_line_ids.filtered(
-            lambda l: l.active and l.detector_id.is_available)
-
         try:
+
+            run = self.env["pulse.run"].create({
+                "config_id": self.id,
+                "audience": audience,
+                "user_id": user.id if user else False,
+            })
+
+            lines = self.detector_line_ids.filtered(
+                lambda l: l.active and l.detector_id.is_available)
+
             for line in lines:
                 detector_id = line.detector_id
                 detector_cls = detector_id._get_detector_class()
