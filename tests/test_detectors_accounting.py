@@ -145,7 +145,7 @@ class TestOverdueInvoicesDetector(AccountingDetectorCase):
         self.assertEqual(by_id[overdue_critical.id].severity, SEVERITY_CRITICAL)
 
     def test_user_scope_filters_to_assigned_salesperson(self):
-        salesperson = self.env.ref("base.user_admin")
+        salesperson = self.salesperson
         mine = self._make_invoice(
             self.partner_a, invoice_date=self.today - relativedelta(days=40),
             due_date=self.today - relativedelta(days=35),

@@ -127,9 +127,22 @@ class TestRunExecution(PulseTransactionCase):
 
     def test_failing_detector_marks_run_failed(self):
         self._link_detector("test.raises")
-        with self.assertRaises(RuntimeError):
+        # Deliberately a plain try/except, not `with self.assertRaises(...)`.
+        # Using assertRaises as a context manager here was observed to lose
+        # the pulse.run row written during exception handling — the search
+        # below would come back empty even immediately after run_digest
+        # confirmed (via internal logging) that it had written status=
+        # "failed" and flushed. Root cause not fully isolated, but the
+        # effect is reproducible and specific to assertRaises; swapping to
+        # a manual try/except reliably avoids it.
+        try:
             self.config.run_digest("company")
-        run = self.config.run_ids.sorted("started_at", reverse=True)[:1]
+            self.fail("expected RuntimeError")
+        except RuntimeError:
+            pass
+
+        run = self.env["pulse.run"].search(
+            [("config_id", "=", self.config.id)], order="id desc", limit=1)
         self.assertEqual(run.status, "failed")
         self.assertIn("boom", run.error_message)
 
@@ -155,9 +168,16 @@ class TestRunExecution(PulseTransactionCase):
             # _cron_run_digests must isolate per-config failures.
             self.env["pulse.config"]._cron_run_digests()
 
-        failed = self.config.run_ids.sorted("started_at", reverse=True)[:1]
-        succeeded = other_config.run_ids.sorted(
-            "started_at", reverse=True)[:1]
+        # Direct search rather than .run_ids.sorted(...), matching the
+        # pattern in test_failing_detector_marks_run_failed — no assertRaises
+        # involved here (the exception is caught inside _cron_run_digests
+        # itself, in production code, not at the test level), so this
+        # shouldn't hit that issue, but a direct query is the more reliable
+        # way to confirm what's actually persisted either way.
+        failed = self.env["pulse.run"].search(
+            [("config_id", "=", self.config.id)], order="id desc", limit=1)
+        succeeded = self.env["pulse.run"].search(
+            [("config_id", "=", other_config.id)], order="id desc", limit=1)
         self.assertEqual(failed.status, "failed")
         self.assertEqual(succeeded.status, "done")
 

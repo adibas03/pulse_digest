@@ -76,7 +76,8 @@ class TestPulseDetectorBaseContract(TransactionCase):
         d = DummyDetector()
         domain = d.apply_user_scope(
             self.env, [("x", "=", 1)], "crm.lead", self.env.ref("base.user_admin"))
-        self.assertIn(("user_id", "=", self.env.ref("base.user_admin").id), domain)
+        self.assertIn(("user_id", "=", self.env.ref(
+            "base.user_admin").id), domain)
 
     def test_apply_user_scope_no_match_returns_domain_unchanged(self):
         d = DummyDetector()
@@ -137,7 +138,7 @@ class TestPulseFinding(TransactionCase):
 
     def test_default_severity_is_info(self):
         f = PulseFinding(res_model="res.partner", res_id=1, res_name="x",
-                          summary="s")
+                         summary="s")
         self.assertEqual(f.severity, SEVERITY_INFO)
 
     def test_rejects_unknown_severity(self):
@@ -153,7 +154,7 @@ class TestPulseFinding(TransactionCase):
 
     def test_optional_fields_default_none(self):
         f = PulseFinding(res_model="res.partner", res_id=1, res_name="x",
-                          summary="s")
+                         summary="s")
         self.assertIsNone(f.detail)
         self.assertIsNone(f.metric_value)
         self.assertIsNone(f.baseline_value)
@@ -164,7 +165,7 @@ class TestPulseDetectorCatalog(TransactionCase):
     """pulse.detector's is_available compute and _get_detector_class resolver."""
 
     def _make_catalog_entry(self, technical_name, detector_class=None,
-                             dependency_modules=None):
+                            dependency_modules=None):
         return self.env["pulse.detector"].create({
             "name": technical_name,
             "technical_name": technical_name,
@@ -209,7 +210,7 @@ class TestPulseDetectorCatalog(TransactionCase):
         detector = self._make_catalog_entry(
             "test.whitespace",
             detector_class="\n    odoo.addons.pulse_digest.tests."
-                            "test_detector_framework.DummyDetector    \n")
+            "test_detector_framework.DummyDetector    \n")
         cls = detector._get_detector_class()
         self.assertEqual(cls.TECHNICAL_NAME, "test.dummy")
 
@@ -220,5 +221,9 @@ class TestPulseDetectorCatalog(TransactionCase):
                 self._make_catalog_entry("test.dup")
 
     def test_seed_catalog_has_six_detectors(self):
-        detectors = self.env["pulse.detector"].search([])
+        # Excludes "test.*" technical names deliberately — other tests in
+        # this class create their own throwaway catalog entries, and an
+        # unfiltered count would be sensitive to test execution order.
+        detectors = self.env["pulse.detector"].search(
+            [("technical_name", "not like", "test.%")])
         self.assertEqual(len(detectors), 6)
