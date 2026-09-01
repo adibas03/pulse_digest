@@ -2,8 +2,22 @@ import pytz
 from odoo import api, models, fields
 import logging
 from .detectors.base import Scope
+from .pulse_channel import CHANNELS
 
 _logger = logging.getLogger(__name__)
+
+# Maps a channel's TECHNICAL_NAME to (the pulse.config field gating it at
+# the company level, the res.users field gating it for that recipient).
+# One dict, read in one place (_dispatch_run), so adding a new channel
+# later is "register it + add one line here," not a scattered change.
+_CHANNEL_FIELDS = {
+    "email": ("email_enabled", "pulse_email_enabled"),
+    "inapp": ("inapp_enabled", "pulse_inapp_enabled"),
+    "whatsapp": ("whatsapp_enabled", "pulse_whatsapp_enabled"),
+}
+
+_CHANNEL_HELP = ("A recipient also needs this channel enabled in their own "
+                "Preferences for it to actually reach them.")
 
 
 def _tz_get(self):
@@ -40,6 +54,20 @@ class PulseConfig(models.Model):
     user_group_id = fields.Many2one("res.groups",
                                     string="Users to include (per-user mode)",
                                     default=lambda self: self.env.ref("pulse_digest.group_pulse_recipient"))
+
+    # Channels — company-level "does this digest use this channel at all,"
+    # separate from each recipient's own pulse_*_enabled preference on
+    # res.users (models/res_users.py). _dispatch_run only sends through a
+    # channel when BOTH this config allows it AND the recipient personally
+    # opted in — either side can veto. E.g. a company with no WhatsApp
+    # Business setup can turn it off here regardless of any user's personal
+    # preference, without having to edit every user record.
+    email_enabled = fields.Boolean(
+        default=True, string="Email", help=_CHANNEL_HELP)
+    inapp_enabled = fields.Boolean(
+        default=True, string="In-App", help=_CHANNEL_HELP)
+    whatsapp_enabled = fields.Boolean(
+        default=False, string="WhatsApp", help=_CHANNEL_HELP)
 
     # Detectors
     detector_line_ids = fields.One2many(
@@ -156,7 +184,49 @@ class PulseConfig(models.Model):
                 "finished_at": fields.Datetime.now(),
             })
             raise
+
+        recipients = user if user else self.company_recipient_ids
+        self._dispatch_run(run, recipients)
         return run
+
+    def _dispatch_run(self, run, recipients):
+        """Send `run`'s digest to each recipient via whichever channels are
+        allowed for BOTH this config and that recipient — either side can
+        veto a channel: this config's email_enabled/inapp_enabled/
+        whatsapp_enabled says whether the digest uses that channel at all,
+        and the recipient's own pulse_*_enabled preference (res.users) says
+        whether they personally want it.
+
+        Only called after a run finishes successfully (run_digest doesn't
+        reach this line if the try/except above re-raised), and only when
+        there's something to report — an empty digest isn't sent. One
+        recipient's or one channel's failure is logged and skipped rather
+        than raised, so it can't take down the others or the run itself;
+        run_digest already returned a successful, "done" run by this point.
+        """
+        self.ensure_one()
+        if not run.line_ids:
+            return
+
+        body_html = run._render_digest_body()
+        subject = "Pulse Digest — {}".format(
+            run.started_at.strftime("%Y-%m-%d") if run.started_at else "")
+
+        for recipient in recipients:
+            for technical_name, (config_field, pref_field) in _CHANNEL_FIELDS.items():
+                if not getattr(self, config_field, False):
+                    continue  # this config's digest doesn't use this channel
+                if not getattr(recipient, pref_field, False):
+                    continue  # recipient personally opted out
+                channel = CHANNELS.get(technical_name)
+                if not channel or not channel.is_available(self.env):
+                    continue
+                try:
+                    channel.send(self.env, recipient, run, body_html, subject)
+                except Exception:
+                    _logger.exception(
+                        "Pulse channel %r failed for run %s, recipient %s",
+                        technical_name, run.id, recipient.id)
 
     def run_all_audiences(self, force=False):
         """Make all runs for digest_mode."""

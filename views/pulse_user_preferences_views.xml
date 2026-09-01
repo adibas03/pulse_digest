@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pulse — per-user channel preferences
+
+  Exposes the pulse_email_enabled / pulse_inapp_enabled / pulse_whatsapp_enabled
+  / pulse_phone fields added to res.users (models/res_users.py) so recipients
+  can actually control which channels _dispatch_run (models/pulse_config.py)
+  sends them a digest through — without this, those fields exist but are
+  reachable only via the ORM/shell.
+
+  Two entry points, for two audiences:
+    - The self-service "Preferences" dialog (avatar menu -> My Profile),
+      so any user can manage their own settings without needing admin access.
+    - The full admin-facing user form under Settings -> Users, so an admin
+      can set up a colleague's WhatsApp number or preferences directly.
+-->
+<odoo>
+    <data>
+
+        <record id="view_users_form_simple_modif_pulse" model="ir.ui.view">
+            <field name="name">res.users.preferences.form.pulse</field>
+            <field name="model">res.users</field>
+            <field name="inherit_id" ref="base.view_users_form_simple_modif" />
+            <field name="arch" type="xml">
+                <field name="tz" position="after">
+                    <group string="Pulse Digest">
+                        <field name="pulse_email_enabled" />
+                        <field name="pulse_inapp_enabled" />
+                        <field name="pulse_whatsapp_enabled" />
+                        <field name="pulse_phone"
+                            invisible="not pulse_whatsapp_enabled" />
+                    </group>
+                </field>
+            </field>
+        </record>
+
+        <record id="view_users_form_pulse" model="ir.ui.view">
+            <field name="name">res.users.form.pulse</field>
+            <field name="model">res.users</field>
+            <field name="inherit_id" ref="base.view_users_form" />
+            <field name="arch" type="xml">
+                <xpath expr="//notebook" position="inside">
+                    <page string="Pulse Digest" name="pulse_digest">
+                        <group>
+                            <field name="pulse_email_enabled" />
+                            <field name="pulse_inapp_enabled" />
+                            <field name="pulse_whatsapp_enabled" />
+                            <field name="pulse_phone"
+                                invisible="not pulse_whatsapp_enabled" />
+                        </group>
+                    </page>
+                </xpath>
+            </field>
+        </record>
+
+    </data>
+</odoo>

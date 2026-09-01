@@ -69,7 +69,7 @@
             <field name="name">Administrator</field>
             <field name="privilege_id" ref="pulse_privilege" />
             <field name="implied_ids" eval="[(4, ref('group_pulse_recipient'))]" />
-            <!-- <field name="user_ids" eval="[(4, ref('base.user_admin'))]" /> -->
+            <field name="user_ids" eval="[(4, ref('base.user_admin'))]" />
             <field name="comment">Configures detectors, recipient lists, schedules. Sees all runs
                 and findings across the company.</field>
         </record>

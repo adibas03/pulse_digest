@@ -37,11 +37,13 @@ by email, in-app notification, or WhatsApp.
         'security/ir.model.access.csv',
         "views/pulse_config_views.xml",
         "views/pulse_run_views.xml",
+        "views/pulse_user_preferences_views.xml",
         # 'views/pulse_detector_views.xml',
         'views/views.xml',
         # 'views/templates.xml',
         'data/pulse_detector_data.xml',
         'data/pulse_cron_data.xml',
+        'data/mail_template_data.xml',
     ],
     # only loaded in demonstration mode
     'demo': [

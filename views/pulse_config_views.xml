@@ -35,6 +35,11 @@
                             <field name="user_group_id"
                                 invisible="digest_mode == 'company'" />
                         </group>
+                        <group string="Channels">
+                            <field name="email_enabled" />
+                            <field name="inapp_enabled" />
+                            <field name="whatsapp_enabled" />
+                        </group>
                         <notebook>
                             <page string="Detectors">
                                 <field name="detector_line_ids">
