@@ -1463,6 +1463,22 @@ register_channel(WhatsAppChannel)
 
 A reviewer adding Slack/Telegram in v1.1 writes one class and one `register_channel` call. No core code changes.
 
+**Note on schema growth (per-channel fields):** each channel currently costs 3
+stored Boolean columns — `pulse.config.<channel>_enabled`,
+`res.users.pulse_<channel>_enabled`, `pulse.run.<channel>_sent` — read via a
+small dict (`_CHANNEL_FIELDS` in `pulse_config.py`) that maps each channel's
+`TECHNICAL_NAME` to that pair of field names. A `fields.Json`-dict alternative
+(one column per model, keyed by channel technical name, driven by the
+`CHANNELS` registry above) was considered to stop this scaling with channel
+count, and declined — Odoo's upgrade path (`-u pulse_digest`) adds
+nullable/defaulted columns automatically, so this isn't an upgrade-safety
+problem, just a field-count one. Plain typed fields are correct for
+closed/bounded state like this (channels, severities, statuses); `fields.Json`
+stays reserved for genuinely unbounded per-item data — e.g.
+`pulse.config.detector.default_params`/`params` already use it since params
+vary per detector, and the planned v1.1 `pulse.finding.state` suppression
+store should too. Revisit this decision if a 4th+ channel is ever added.
+
 ---
 
 ## 7. Cron and execution
