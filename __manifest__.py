@@ -35,6 +35,7 @@ by email, in-app notification, or WhatsApp.
     'data': [
         'security/pulse_security.xml',
         'security/ir.model.access.csv',
+        "wizards/pulse_run_wizard_views.xml",
         "views/pulse_config_views.xml",
         "views/pulse_run_views.xml",
         "views/pulse_user_preferences_views.xml",

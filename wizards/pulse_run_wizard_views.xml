@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_pulse_run_wizard_form" model="ir.ui.view">
+            <field name="name">pulse.run.wizard.form</field>
+            <field name="model">pulse.run.wizard</field>
+            <field name="arch" type="xml">
+                <form string="Run Pulse Digest">
+                    <group>
+                        <field name="config_id" options="{'no_create': True}" />
+                        <field name="audience" widget="radio" />
+                        <field name="allowed_user_ids" invisible="1" />
+                        <field name="user_id"
+                            invisible="audience != 'user'"
+                            required="audience == 'user'" />
+                    </group>
+                    <footer>
+                        <button name="action_run" type="object" string="Run"
+                            class="btn-primary" />
+                        <button string="Cancel" class="btn-secondary" special="cancel" />
+                    </footer>
+                </form>
+            </field>
+        </record>
+
+        <record id="action_pulse_run_wizard" model="ir.actions.act_window">
+            <field name="name">Run Pulse Digest</field>
+            <field name="res_model">pulse.run.wizard</field>
+            <field name="view_mode">form</field>
+            <field name="target">new</field>
+        </record>
+    </data>
+</odoo>

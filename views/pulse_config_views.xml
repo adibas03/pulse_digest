@@ -11,6 +11,10 @@
                         <button name="action_run_now" type="object"
                             string="Run Now" class="oe_highlight"
                             groups="pulse_digest.group_pulse_admin" />
+                        <button name="%(pulse_digest.action_pulse_run_wizard)d" type="action"
+                            string="Run For User..." class="btn-secondary"
+                            groups="pulse_digest.group_pulse_admin"
+                            context="{'default_config_id': id}" />
                         <button name="action_view_runs" type="object" string="History"
                             class="btn-secondary"
                             groups="pulse_digest.group_pulse_recipient" />
