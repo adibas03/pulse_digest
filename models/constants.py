@@ -23,3 +23,8 @@ SEVERITIES = tuple(value for value, _label in SEVERITY_SELECTION)
 
 # Ordering helper — useful for sorting findings by urgency.
 SEVERITY_ORDER = {SEVERITY_INFO: 0, SEVERITY_WARNING: 1, SEVERITY_CRITICAL: 2}
+
+# Worst-first ordering for UI/digest display (critical shown first), distinct
+# from SEVERITY_ORDER above (ascending). Single source of truth for both
+# pulse.run._render_digest_body and pulse.run.line.severity_sequence.
+SEVERITY_DISPLAY_ORDER = {SEVERITY_CRITICAL: 0, SEVERITY_WARNING: 1, SEVERITY_INFO: 2}

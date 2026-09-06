@@ -223,6 +223,9 @@ class PulseConfig(models.Model):
                     continue
                 try:
                     channel.send(self.env, recipient, run, body_html, subject)
+                    sent_field = {"email": "email_sent", "inapp": "inapp_sent",
+                                 "whatsapp": "whatsapp_sent"}[technical_name]
+                    run[sent_field] = True
                 except Exception:
                     _logger.exception(
                         "Pulse channel %r failed for run %s, recipient %s",

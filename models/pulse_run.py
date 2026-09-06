@@ -1,6 +1,12 @@
 from odoo import models, fields, api
 
-from .constants import SEVERITY_ORDER as _SEVERITY_ORDER
+from .constants import (
+    SEVERITY_SELECTION,
+    SEVERITY_DISPLAY_ORDER,
+    SEVERITY_INFO,
+    SEVERITY_WARNING,
+    SEVERITY_CRITICAL,
+)
 
 
 class PulseRun(models.Model):
@@ -34,6 +40,12 @@ class PulseRun(models.Model):
 
     line_ids = fields.One2many("pulse.run.line", "run_id")
     line_count = fields.Integer(compute="_compute_line_count", store=True)
+    critical_count = fields.Integer(compute="_compute_severity_stats", store=True)
+    warning_count = fields.Integer(compute="_compute_severity_stats", store=True)
+    info_count = fields.Integer(compute="_compute_severity_stats", store=True)
+    worst_severity = fields.Selection(
+        SEVERITY_SELECTION, compute="_compute_severity_stats", store=True,
+        help="Highest severity among this run's findings; used to color the run in list views.")
 
     # Delivery state per channel
     email_sent = fields.Boolean()
@@ -45,15 +57,26 @@ class PulseRun(models.Model):
         for run in self:
             run.line_count = len(run.line_ids)
 
-    def _render_digest_body(self):
-        """Findings grouped by severity, as a plain HTML fragment.
+    @api.depends("line_ids.severity")
+    def _compute_severity_stats(self):
+        for run in self:
+            lines = run.line_ids
+            run.critical_count = len(lines.filtered(lambda l: l.severity == SEVERITY_CRITICAL))
+            run.warning_count = len(lines.filtered(lambda l: l.severity == SEVERITY_WARNING))
+            run.info_count = len(lines.filtered(lambda l: l.severity == SEVERITY_INFO))
+            run.worst_severity = (
+                SEVERITY_CRITICAL if run.critical_count else
+                SEVERITY_WARNING if run.warning_count else
+                SEVERITY_INFO if run.info_count else False
+            )
 
-        Stand-in for the full portal-page rendering the original spec
-        planned (views/pulse_portal_templates.xml, deferred — see
-        pulse_digest_spec.md §14). This is deliberately minimal: enough to
-        actually deliver real content via email/in-app now, without pulling
-        in the portal page's scope. Reused by EmailChannel and InAppChannel
-        so the findings list is only rendered once per run.
+    def _render_digest_body(self):
+        """Findings grouped by severity, worst-first, as a plain HTML fragment.
+
+        Deliberately minimal — no portal page is planned (recipients are
+        internal Odoo users with backend access; see pulse_digest_spec.md
+        §14). Reused by EmailChannel and InAppChannel so the findings list
+        is only rendered once per run.
         """
         self.ensure_one()
         from markupsafe import Markup, escape
@@ -62,7 +85,7 @@ class PulseRun(models.Model):
             return Markup("<p>No findings for this run.</p>")
 
         lines = self.line_ids.sorted(
-            key=lambda l: _SEVERITY_ORDER.get(l.severity, 99))
+            key=lambda l: SEVERITY_DISPLAY_ORDER.get(l.severity, 99))
 
         rows = Markup("").join(
             Markup(
@@ -75,11 +98,9 @@ class PulseRun(models.Model):
         return Markup('<ul style="list-style:none;padding:0;margin:0;">{}</ul>').format(rows)
 
     def get_run_url(self):
-        """Backend URL to this run's form view. Stand-in for a portal URL
-        (no /my/pulse/<run_id> page exists yet — see _render_digest_body's
-        docstring) — points recipients at the backend record instead, which
-        works for anyone with backend access even if it's not the polished
-        portal experience the spec envisioned."""
+        """Backend URL to this run's form view — the intended way recipients
+        view a run's findings (see _render_digest_body's docstring); no
+        portal page is planned for this module."""
         self.ensure_one()
         base_url = self.env["ir.config_parameter"].sudo().get_param(
             "web.base.url")
