@@ -70,9 +70,18 @@ class PulseConfig(models.Model):
         default=False, string="WhatsApp", help=_CHANNEL_HELP)
 
     # Detectors
+    # context={"active_test": False}: without it, deactivating a detector
+    # line (unchecking Active in this list) makes the row vanish from the
+    # Detectors tab entirely — Odoo auto-filters any fetch of a model with
+    # a field literally named "active" unless the context overrides it.
+    # This must be set on the field DEFINITION, not the view's field tag —
+    # the view-level context attribute for this is unreliable for x2many
+    # fields (a long-standing Odoo issue; fixed in core by having the
+    # field's own context take precedence — see odoo/odoo#42784).
     detector_line_ids = fields.One2many(
         "pulse.config.detector", "config_id",
-        string="Detectors")
+        string="Detectors",
+        context={"active_test": False})
 
     # Reporting
     run_ids = fields.One2many("pulse.run", "config_id")

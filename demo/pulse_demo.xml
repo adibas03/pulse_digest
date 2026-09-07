@@ -13,11 +13,14 @@
   What this creates:
     1. A pulse.config for the main company, scheduled at 07:00, "both"
        digest mode (company-wide + per-user).
-    2. The three default-enabled detectors linked and active. The other
-       three (statistical/credit-limit) are linked but inactive, so a
-       reviewer browsing the config sees the full catalog and the
-       enable-by-default vs opt-in distinction.
+    2. The four default-enabled detectors linked and active. The other
+       two (statistical) are linked but inactive, so a reviewer browsing
+       the config sees the full catalog and the enable-by-default vs
+       opt-in distinction.
     3. admin user added as the company digest recipient.
+    4. The standard demo user (Marc Demo) granted Recipient access, so a
+       reviewer logged in as demo sees Pulse runs/findings without needing
+       admin.
 -->
 <odoo>
     <data noupdate="1">
@@ -30,13 +33,13 @@
              so a reviewer logged in as demo can see Pulse runs/findings
              without needing admin. -->
 
-        <!-- <record id="base.user_demo" model="res.users">
-            <field name="groups_id" eval="[(4, ref('group_pulse_recipient'))]" />
-        </record> -->
+        <record id="base.user_demo" model="res.users">
+            <field name="group_ids" eval="[(4, ref('group_pulse_recipient'))]" />
+        </record>
 
         <!-- ============================================================ -->
         <!-- Demo Pulse config                                            -->
-        <!-- ============================================================ 
+        <!-- ============================================================ -->
 
         <record id="demo_pulse_config_main" model="pulse.config">
             <field name="name">Daily Pulse</field>
@@ -47,11 +50,10 @@
             <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]"/>
             <field name="user_group_id" ref="group_pulse_recipient"/>
         </record>
-    -->
 
         <!-- ============================================================ -->
         <!-- Activated detectors (defaults-on)                            -->
-        <!-- ============================================================ 
+        <!-- ============================================================ -->
 
         <record id="demo_config_detector_overdue" model="pulse.config.detector">
             <field name="config_id" ref="demo_pulse_config_main"/>
@@ -76,7 +78,6 @@
             <field name="detector_id" ref="detector_sale_deals_closing_today"/>
             <field name="active" eval="True"/>
         </record>
--->
 
         <!-- ============================================================ -->
         <!-- Linked-but-inactive detectors (statistical, opt-in)          -->
@@ -84,7 +85,7 @@
         <!-- Linked so they show in the config UI with an enable toggle,  -->
         <!-- demonstrating the "Conservative defaults, statistical ones   -->
         <!-- visible but off" UX from the spec.                           -->
-        <!-- ============================================================ 
+        <!-- ============================================================ -->
 
         <record id="demo_config_detector_payment_outlier" model="pulse.config.detector">
             <field name="config_id" ref="demo_pulse_config_main"/>
@@ -97,7 +98,6 @@
             <field name="detector_id" ref="detector_sale_deal_velocity_drop"/>
             <field name="active" eval="False"/>
         </record>
-        -->
 
     </data>
 </odoo>
