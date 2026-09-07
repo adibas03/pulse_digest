@@ -1,6 +1,6 @@
 #!/bin/bash
 # run-tests.sh — usage: ./run-tests.sh [test-tags]
-# sh mnt/extra-addons/pulse_digest/scripts/run-tests.sh 
+# sh mnt/extra-addons/pulse_digest/scripts/run-tests.sh
 # sh mnt/extra-addons/pulse_digest/scripts/run-tests.sh /pulse_digest
 
 set -eux

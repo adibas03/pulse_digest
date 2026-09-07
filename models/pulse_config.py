@@ -138,6 +138,7 @@ class PulseConfig(models.Model):
         company = user.company_id if user else self.company_id
         scope = Scope.user(user) if user else Scope.company(company)
 
+        run = None
         try:
 
             run = self.env["pulse.run"].create({
@@ -178,11 +179,15 @@ class PulseConfig(models.Model):
                 "duration_ms": int((fields.Datetime.now() - run.started_at).total_seconds() * 1000),
             })
         except Exception as e:
-            run.write({
-                "status": "failed",
-                "error_message": str(e),
-                "finished_at": fields.Datetime.now(),
-            })
+            # run can be None here if pulse.run.create() itself is what
+            # raised (e.g. an AccessError) — nothing to mark failed in that
+            # case, just let the original exception propagate.
+            if run:
+                run.write({
+                    "status": "failed",
+                    "error_message": str(e),
+                    "finished_at": fields.Datetime.now(),
+                })
             raise
 
         recipients = user if user else self.company_recipient_ids

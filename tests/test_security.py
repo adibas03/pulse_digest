@@ -58,6 +58,23 @@ class TestViewerAccess(PulseTransactionCase):
         with self.assertRaises(AccessError):
             run.with_user(plain_user).read(["status"])
 
+    def test_plain_internal_user_cannot_trigger_admin_run_now(self):
+        plain_user = self._make_user(
+            "Plain Internal User 5", "pulse_plain_user_5",
+            self.env.ref("base.group_user"))
+        with self.assertRaises(AccessError):
+            self.config.with_user(plain_user).action_admin_run_now(
+                audience="company")
+
+    def test_plain_internal_user_cannot_access_run_wizard(self):
+        plain_user = self._make_user(
+            "Plain Internal User 6", "pulse_plain_user_6",
+            self.env.ref("base.group_user"))
+        with self.assertRaises(AccessError):
+            self.env["pulse.run.wizard"].with_user(plain_user).create({
+                "config_id": self.config.id,
+            })
+
 
 class TestRecipientAccess(PulseTransactionCase):
 
@@ -94,6 +111,17 @@ class TestRecipientAccess(PulseTransactionCase):
         with self.assertRaises(AccessError):
             self.config.with_user(self.user_a).write({"name": "Hacked"})
 
+    def test_recipient_cannot_trigger_admin_run_now(self):
+        with self.assertRaises(AccessError):
+            self.config.with_user(self.user_a).action_admin_run_now(
+                audience="company")
+
+    def test_recipient_cannot_access_run_wizard(self):
+        with self.assertRaises(AccessError):
+            self.env["pulse.run.wizard"].with_user(self.user_a).create({
+                "config_id": self.config.id,
+            })
+
 
 class TestAdminAccess(PulseTransactionCase):
 
@@ -117,3 +145,21 @@ class TestAdminAccess(PulseTransactionCase):
                 "detector_class": "x.y.Z",
             })
         detector.with_user(self.user_admin).unlink()
+
+    def test_admin_can_trigger_admin_run_now(self):
+        self.config.with_user(self.user_admin).action_admin_run_now(
+            audience="company")  # must not raise
+        run = self.env["pulse.run"].search(
+            [("config_id", "=", self.config.id)], order="id desc", limit=1)
+        self.assertEqual(run.audience, "company")
+
+    def test_admin_can_create_and_run_the_run_wizard(self):
+        wizard = self.env["pulse.run.wizard"].with_user(
+            self.user_admin).create({
+                "config_id": self.config.id,
+                "audience": "company",
+            })
+        wizard.action_run()  # must not raise
+        run = self.env["pulse.run"].search(
+            [("config_id", "=", self.config.id)], order="id desc", limit=1)
+        self.assertEqual(run.audience, "company")

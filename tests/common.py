@@ -36,11 +36,21 @@ class PulseTransactionCase(TransactionCase):
 
     @classmethod
     def _make_user(cls, name, login, group):
+        # base.group_user (Internal User) is always included alongside the
+        # Pulse group being tested — in real deployments Pulse groups are
+        # layered onto an existing internal user, never a substitute for
+        # one. Without it, a test fixture can lack baseline access needed
+        # by unrelated code (e.g. mail.thread.create() reading res.company
+        # to compute reply-to info), producing confusing AccessErrors that
+        # have nothing to do with what the test is actually checking.
         return cls.env["res.users"].create({
             "name": name,
             "login": login,
             "email": f"{login}@example.com",
-            "group_ids": [(4, group.id)],
+            "group_ids": [
+                (4, cls.env.ref("base.group_user").id),
+                (4, group.id),
+            ],
         })
 
     def _link_detector(self, technical_name, active=True, params=None):
