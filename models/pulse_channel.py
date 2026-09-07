@@ -17,9 +17,16 @@ class EmailChannel(PulseChannel):
 
     def send(self, env, recipient, run, body_html, subject):
         template = env.ref("pulse_digest.mail_template_pulse_digest")
+        base_url = env["ir.config_parameter"].sudo().get_param("web.base.url")
+        # base.action_res_users_my is the same action the "Preferences" menu
+        # item (avatar menu -> My Profile) opens — the self-service dialog
+        # views/pulse_user_preferences_views.xml extends with the channel
+        # fields, so this deep-links straight to the right place.
+        preferences_url = f"{base_url}/odoo/action-base.action_res_users_my"
         template.with_context(
             body_html=body_html,
             subject=subject,
+            preferences_url=preferences_url,
         ).send_mail(run.id, email_values={"email_to": recipient.email})
 
 
@@ -81,8 +88,9 @@ class WhatsAppChannel(PulseChannel):
             "res_model": "pulse.run",
             "res_ids": str(run.ids),
             "wa_template_id": template.id,
-            # get_run_url() is a backend-URL stand-in for the portal page
-            # the spec envisioned (deferred — see PulseRun docstrings).
+            # get_run_url() is the intended link — no portal page exists or
+            # is planned (see PulseRun docstrings); recipients are internal
+            # users with backend access, so the backend URL is the design.
             "free_text_1": run.get_run_url(),
             "free_text_2": str(len(run.line_ids)),
         })

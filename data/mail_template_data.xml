@@ -10,11 +10,12 @@
         template serves company-wide and per-user runs with run-specific
         content.
 
-  The HTML body is intentionally minimal — the heavy QWeb rendering of
-  the findings list lives in the portal templates (views/pulse_portal_templates.xml)
-  so it can be reused for both the email body AND the /my/pulse/<run_id>
-  portal page. Email uses the inline-html version; portal uses the same
-  fragment in a full page chrome.
+  The HTML body is intentionally minimal — the findings list itself is
+  rendered once in Python (pulse.run._render_digest_body, plain Markup, no
+  QWeb) and passed in via context as body_html, so EmailChannel and
+  InAppChannel both reuse the same rendering. No portal page exists or is
+  planned for this module (recipients are internal users with backend
+  access); this template's chrome is the only place body_html is shown.
 
   noupdate="1" lets admins customize templates without losing changes on
   module update — standard Odoo mail-template hygiene.
