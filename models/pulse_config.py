@@ -1,5 +1,6 @@
 import pytz
-from odoo import api, models, fields
+from odoo import api, models, fields, _
+from odoo.exceptions import ValidationError
 import logging
 from .detectors.base import Scope
 from .pulse_channel import CHANNELS
@@ -17,7 +18,7 @@ _CHANNEL_FIELDS = {
 }
 
 _CHANNEL_HELP = ("A recipient also needs this channel enabled in their own "
-                "Preferences for it to actually reach them.")
+                 "Preferences for it to actually reach them.")
 
 
 def _tz_get(self):
@@ -50,9 +51,18 @@ class PulseConfig(models.Model):
     company_recipient_ids = fields.Many2many("res.users",
                                              string="Company digest recipients",
                                              domain="[('company_ids', 'in', company_id)]")
+    recipient_group_ids = fields.Many2many(
+        "res.groups", string="Recipient groups",
+        help="Every current member of these groups also receives whichever "
+             "digest is dispatched — company-wide or per-user runs alike — "
+             "in addition to that run's normal recipient(s). Resolved "
+             "dynamically at dispatch time: add or remove someone from the "
+             "group and their digest membership follows, no config edit "
+             "needed. Only members belonging to the run's own company are "
+             "included, even if the group itself spans multiple companies.")
 
     user_group_id = fields.Many2one("res.groups",
-                                    string="Users to include (per-user mode)",
+                                    string="User Digests to run (per-user mode)",
                                     default=lambda self: self.env.ref("pulse_digest.group_pulse_recipient"))
 
     # Channels — company-level "does this digest use this channel at all,"
@@ -89,6 +99,19 @@ class PulseConfig(models.Model):
 
     _company_uniq = models.Constraint(
         "UNIQUE(company_id)", "Only one Pulse config per company.")
+
+    @api.constrains("digest_mode", "company_recipient_ids", "recipient_group_ids")
+    def _check_company_recipients_set(self):
+        # A SQL constraint can't express this — both fields are Many2many,
+        # so there's no column on pulse.config itself to CHECK against.
+        for config in self:
+            if config.digest_mode not in ("company", "both"):
+                continue  # company-wide dispatch isn't active; nothing to enforce
+            if not config.company_recipient_ids and not config.recipient_group_ids:
+                raise ValidationError(_(
+                    "Company-wide digest mode is enabled, but no company "
+                    "recipients are set — add at least one recipient user "
+                    "or group, or switch digest mode to per-user only."))
 
     @api.depends("run_ids.status", "run_ids.finished_at")
     def _compute_last_run(self):
@@ -199,7 +222,26 @@ class PulseConfig(models.Model):
                 })
             raise
 
-        recipients = user if user else self.company_recipient_ids
+        # recipient_group_ids applies to any run, regardless of audience —
+        # it decouples "whose records this run is scoped to" from "who
+        # receives it": a per-user run's owner still gets their own digest,
+        # but the group's current members are forwarded the same thing
+        # (e.g. a salesperson's run also reaching their team while they're
+        # out). Filtered to the run's own company (`company`, computed
+        # above) since group membership isn't company-scoped in Odoo the
+        # way company_recipient_ids's domain already restricts individual
+        # users — without this, a group spanning multiple companies could
+        # leak this run's company's data to an unrelated company's users.
+        # Both sides of every union below are always valid (possibly
+        # empty) recordsets — never None — so this is safe even when a
+        # field is empty; the save-time constraint above is what actually
+        # guarantees company-wide mode has at least one recipient.
+        recipient_group_users = self.recipient_group_ids.all_user_ids.filtered(
+            lambda u: company in u.company_ids)
+        if user:
+            recipients = user | recipient_group_users
+        else:
+            recipients = self.company_recipient_ids | recipient_group_users
         self._dispatch_run(run, recipients)
         return run
 
@@ -238,7 +280,7 @@ class PulseConfig(models.Model):
                 try:
                     channel.send(self.env, recipient, run, body_html, subject)
                     sent_field = {"email": "email_sent", "inapp": "inapp_sent",
-                                 "whatsapp": "whatsapp_sent"}[technical_name]
+                                  "whatsapp": "whatsapp_sent"}[technical_name]
                     run[sent_field] = True
                 except Exception:
                     _logger.exception(

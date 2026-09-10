@@ -149,12 +149,20 @@ class TestRunExecution(PulseTransactionCase):
     def test_cron_run_digests_isolates_failure_per_config(self):
         other_company = self.env["res.company"].create(
             {"name": "Other Company"})
+        other_company_admin = self.env["res.users"].create({
+            "name": "Other Company Admin",
+            "login": "pulse_other_company_admin",
+            "email": "pulse_other_company_admin@example.com",
+            "company_id": other_company.id,
+            "company_ids": [(6, 0, [other_company.id])],
+        })
         other_config = self.env["pulse.config"].create({
             "name": "Other Config",
             "company_id": other_company.id,
             "digest_mode": "company",
             "run_time": self.config.run_time,
             "timezone": self.config.timezone,
+            "company_recipient_ids": [(6, 0, [other_company_admin.id])],
         })
         self._link_detector("test.raises")
         self.env["pulse.config.detector"].create({

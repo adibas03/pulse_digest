@@ -32,6 +32,12 @@ class PulseTransactionCase(TransactionCase):
             "company_id": cls.env.company.id,
             "digest_mode": "both",
             "user_group_id": cls.group_recipient.id,
+            # digest_mode="both" includes company-wide dispatch, which
+            # requires at least one company recipient (user or group) per
+            # pulse.config._check_company_recipients_set — without this,
+            # every test using this fixture fails at class setup, not just
+            # dispatch-related ones.
+            "company_recipient_ids": [(6, 0, [cls.user_admin.id])],
         })
 
     @classmethod

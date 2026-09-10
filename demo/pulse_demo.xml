@@ -21,6 +21,12 @@
     4. The standard demo user (Marc Demo) granted Recipient access, so a
        reviewer logged in as demo sees Pulse runs/findings without needing
        admin.
+    5. The Recipient group set as recipient_group_ids, so every run —
+       company-wide or per-user alike — also forwards to that group's
+       current members. In this demo, that's admin (implied via the
+       Administrator group) and Marc Demo, demonstrating group-based
+       forwarding distinct from admin's individual company_recipient_ids
+       listing above.
 -->
 <odoo>
     <data noupdate="1">
@@ -49,6 +55,7 @@
             <field name="digest_mode">both</field>
             <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]"/>
             <field name="user_group_id" ref="group_pulse_recipient"/>
+            <field name="recipient_group_ids" eval="[(6, 0, [ref('group_pulse_recipient')])]"/>
         </record>
 
         <!-- ============================================================ -->
