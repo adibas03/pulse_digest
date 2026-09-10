@@ -84,6 +84,33 @@ class TestRecipientResolution(PulseTransactionCase):
         self.assertIn(self.user_a.id, recipients.ids)
         self.assertNotIn(other_company_user.id, recipients.ids)
 
+    def test_recipient_group_with_only_foreign_members_satisfies_constraint_but_dispatches_to_nobody(self):
+        # A group can satisfy the save-time "at least one recipient"
+        # constraint (the field is populated) while still resolving to
+        # zero actual recipients at dispatch time, if none of its current
+        # members belong to the run's company. Not a bug — the constraint
+        # checks configuration, not live membership, which can change
+        # after the config is saved — but worth pinning explicitly so the
+        # two checks (save-time vs. dispatch-time) aren't conflated.
+        other_company = self.env["res.company"].create({"name": "Other Co"})
+        other_company_user = self.env["res.users"].create({
+            "name": "Other Co User 2",
+            "login": "pulse_other_co_user_2",
+            "email": "pulse_other_co_user_2@example.com",
+            "company_id": other_company.id,
+            "company_ids": [(6, 0, [other_company.id])],
+        })
+        self.team_group.user_ids = [(6, 0, [other_company_user.id])]
+
+        self.config.write({
+            "digest_mode": "both",
+            "company_recipient_ids": [(5, 0, 0)],
+            "recipient_group_ids": [(6, 0, [self.team_group.id])],
+        })  # must not raise — the field is populated
+
+        recipients = self._run_digest_recipients("company")
+        self.assertFalse(recipients)
+
     def test_recipient_group_ids_resolves_dynamically(self):
         self.config.recipient_group_ids = [(6, 0, [self.team_group.id])]
         self.team_group.user_ids = [(6, 0, [self.user_a.id])]

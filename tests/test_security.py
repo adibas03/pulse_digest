@@ -123,6 +123,76 @@ class TestRecipientAccess(PulseTransactionCase):
             })
 
 
+class TestRunLineAccess(PulseTransactionCase):
+    """pulse.run.line has no user_id/audience of its own — its record rules
+    (pulse_run_line_user_rule etc., security/pulse_security.xml) traverse
+    run_id.user_id/run_id.audience to mirror pulse_run_user_rule. Without
+    them, the ACL alone (read=1 for every Recipient, no row scoping) would
+    let a recipient read ANY run's lines directly via search — not just
+    runs they're allowed to see through the nested form view. These tests
+    exercise that enforcement directly, not just that the rule XML exists.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.detector = cls.env["pulse.detector"].create({
+            "name": "Test Fixture Detector",
+            "technical_name": "test.run_line_access_fixture",
+            "category": "accounting",
+            "detector_class": "x.y.Z",  # never resolved — no compute() call
+        })
+
+    def _make_line(self, run):
+        return self.env["pulse.run.line"].create({
+            "run_id": run.id,
+            "detector_id": self.detector.id,
+            "res_model": "res.partner",
+            "res_id": self.env.company.partner_id.id,
+            "res_name": "Test",
+            "summary": "a finding",
+        })
+
+    def test_recipient_sees_own_per_user_run_lines(self):
+        run = self.config.run_digest("user", user=self.user_a)
+        line = self._make_line(run)
+        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
+            [("id", "=", line.id)])
+        self.assertEqual(seen, line)
+
+    def test_recipient_does_not_see_other_users_run_lines(self):
+        run = self.config.run_digest("user", user=self.user_b)
+        line = self._make_line(run)
+        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
+            [("id", "=", line.id)])
+        self.assertFalse(seen)
+
+    def test_recipient_does_not_see_company_wide_run_lines(self):
+        run = self.config.run_digest("company")
+        line = self._make_line(run)
+        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
+            [("id", "=", line.id)])
+        self.assertFalse(seen)
+
+    def test_plain_internal_user_cannot_read_run_lines(self):
+        run = self.config.run_digest("user", user=self.user_a)
+        line = self._make_line(run)
+        plain_user = self._make_user(
+            "Plain Internal User 7", "pulse_plain_user_7",
+            self.env.ref("base.group_user"))
+        with self.assertRaises(AccessError):
+            line.with_user(plain_user).read(["summary"])
+
+    def test_admin_sees_all_run_lines(self):
+        user_run = self.config.run_digest("user", user=self.user_a)
+        company_run = self.config.run_digest("company")
+        user_line = self._make_line(user_run)
+        company_line = self._make_line(company_run)
+        seen = self.env["pulse.run.line"].with_user(self.user_admin).search(
+            [("id", "in", [user_line.id, company_line.id])])
+        self.assertEqual(len(seen), 2)
+
+
 class TestAdminAccess(PulseTransactionCase):
 
     def test_admin_sees_every_run(self):
