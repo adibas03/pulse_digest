@@ -51,6 +51,8 @@
                                         <field name="detector_id" />
                                         <field name="category" />
                                         <field name="is_statistical" />
+                                        <field name="rationale" optional="hide" widget="text" />
+                                        <field name="description" optional="hide" widget="text" />
                                         <field name="active" />
                                     </list>
                                 </field>

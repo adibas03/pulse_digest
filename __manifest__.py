@@ -39,7 +39,6 @@ by email, in-app notification, or WhatsApp.
         "views/pulse_config_views.xml",
         "views/pulse_run_views.xml",
         "views/pulse_user_preferences_views.xml",
-        # 'views/pulse_detector_views.xml',
         'views/pulse_menus.xml',
         # 'views/templates.xml',
         'data/pulse_detector_data.xml',

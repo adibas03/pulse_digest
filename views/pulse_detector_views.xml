@@ -1,5 +1,0 @@
-<!-- <record id="pulse_detector_action" model="ir.actions.act_window">
-    <field name="name">Detector action</field>
-    <field name="res_model">pulse_detector</field>
-    <field name="view_mode">list,form</field>
-</record> -->

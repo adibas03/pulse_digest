@@ -18,6 +18,12 @@ class PulseConfigDetector(models.Model):
     category = fields.Selection(related="detector_id.category", store=True)
     is_statistical = fields.Boolean(
         related="detector_id.is_statistical", store=True)
+    # Not stored — pure passthrough display text for the Detectors tab
+    # (optional/hidden columns, see pulse_config_views.xml), so an admin can
+    # read why a detector matters before enabling it, no filtering/sorting
+    # need that would justify the extra stored columns.
+    description = fields.Text(related="detector_id.description")
+    rationale = fields.Text(related="detector_id.rationale")
 
     _config_detector_uniq = models.Constraint(
         "UNIQUE(config_id, detector_id)", "Each detector can only be linked once per config.")
