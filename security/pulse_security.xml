@@ -134,5 +134,39 @@
             <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
 
+        <!-- pulse.run.line has no user_id/audience of its own — it mirrors
+             pulse_run_user_rule above by traversing run_id. Without this,
+             the ACL alone (read=1 for every Recipient, no row scoping) lets
+             a recipient read ANY run's lines directly (e.g. via RPC/search
+             with a different run_id), not just runs they're allowed to see
+             through the nested form view — the gap §8.3 of the spec flagged
+             as "harmless today only because of how it's currently reached,"
+             which is not a real security boundary. -->
+        <record id="pulse_run_line_user_rule" model="ir.rule">
+            <field name="name">Pulse Run Line: own runs only (recipients)</field>
+            <field name="model_id" ref="model_pulse_run_line" />
+            <field name="domain_force">[('run_id.user_id', '=', user.id), ('run_id.audience', '=', 'user')]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_recipient'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="False" />
+            <field name="perm_create" eval="False" />
+            <field name="perm_unlink" eval="False" />
+        </record>
+
+        <record id="pulse_run_line_admin_rule" model="ir.rule">
+            <field name="name">Pulse Run Line: all lines (admins)</field>
+            <field name="model_id" ref="model_pulse_run_line" />
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_admin'))]" />
+        </record>
+
+        <record id="pulse_run_line_company_rule" model="ir.rule">
+            <field name="name">Pulse Run Line: multi-company</field>
+            <field name="model_id" ref="model_pulse_run_line" />
+            <field name="global" eval="True" />
+            <field name="domain_force">['|', ('run_id.company_id', '=', False), ('run_id.company_id', 'in',
+                company_ids)]</field>
+        </record>
+
     </data>
 </odoo>

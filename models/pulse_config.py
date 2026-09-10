@@ -53,13 +53,14 @@ class PulseConfig(models.Model):
                                              domain="[('company_ids', 'in', company_id)]")
     recipient_group_ids = fields.Many2many(
         "res.groups", string="Recipient groups",
-        help="Every current member of these groups also receives whichever "
-             "digest is dispatched — company-wide or per-user runs alike — "
-             "in addition to that run's normal recipient(s). Resolved "
-             "dynamically at dispatch time: add or remove someone from the "
-             "group and their digest membership follows, no config edit "
-             "needed. Only members belonging to the run's own company are "
-             "included, even if the group itself spans multiple companies.")
+        help="Every member of these groups belonging to the target "
+             "company also receives whichever digest is dispatched — "
+             "company-wide or per-user runs alike — in addition to that "
+             "run's normal recipient(s). If a group spans multiple "
+             "companies, only members in the run's own company are "
+             "notified. Resolved dynamically at dispatch time: add or "
+             "remove someone from the group and their digest membership "
+             "follows, no config edit needed.")
 
     user_group_id = fields.Many2one("res.groups",
                                     string="User Digests to run (per-user mode)",
