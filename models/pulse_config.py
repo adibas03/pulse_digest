@@ -256,20 +256,32 @@ class PulseConfig(models.Model):
 
         Only called after a run finishes successfully (run_digest doesn't
         reach this line if the try/except above re-raised), and only when
-        there's something to report — an empty digest isn't sent. One
-        recipient's or one channel's failure is logged and skipped rather
-        than raised, so it can't take down the others or the run itself;
-        run_digest already returned a successful, "done" run by this point.
+        the run has something to report at all — an entirely empty run
+        isn't dispatched to anyone. One recipient's or one channel's
+        failure is logged and skipped rather than raised, so it can't take
+        down the others or the run itself; run_digest already returned a
+        successful, "done" run by this point.
+
+        The digest body is rendered per recipient, not once for the whole
+        run — different recipients can have different read access to the
+        specific records the run's findings reference (see pulse.run.
+        _filter_lines_readable_by), so a single shared render could leak a
+        record's name/summary to someone who can't actually read it. Every
+        recipient still gets dispatched to, even if none of the run's
+        findings are visible to them — the rendered body itself discloses
+        that ("N finding(s) not shown — access restricted") rather than
+        the recipient silently receiving nothing with no signal why.
         """
         self.ensure_one()
         if not run.line_ids:
             return
 
-        body_html = run._render_digest_body()
         subject = "Pulse Digest — {}".format(
             run.started_at.strftime("%Y-%m-%d") if run.started_at else "")
 
         for recipient in recipients:
+            visible_lines = run._filter_lines_readable_by(recipient)
+            body_html = run._render_digest_body(visible_lines)
             for technical_name, (config_field, pref_field) in _CHANNEL_FIELDS.items():
                 if not getattr(self, config_field, False):
                     continue  # this config's digest doesn't use this channel

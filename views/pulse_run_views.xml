@@ -34,6 +34,13 @@
             <field name="arch" type="xml">
                 <form string="Pulse Run">
                     <sheet>
+                        <div class="oe_button_box" name="button_box">
+                            <button name="action_view_sent_mails" type="object"
+                                class="oe_stat_button" icon="fa-envelope-o"
+                                groups="pulse_digest.group_pulse_admin">
+                                <field name="mail_count" widget="statinfo" string="Sent Emails" />
+                            </button>
+                        </div>
                         <widget name="web_ribbon" title="Failed" bg_color="text-bg-danger"
                             invisible="status != 'failed'" />
                         <div class="alert alert-danger" role="alert" invisible="status != 'failed'">
@@ -98,6 +105,7 @@
                             </list>
                         </field>
                     </sheet>
+                    <chatter />
                 </form>
             </field>
         </record>
