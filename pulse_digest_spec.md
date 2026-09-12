@@ -105,15 +105,24 @@ Two real corrections from the original Nov 2025 pass (WhatsApp send mechanism + 
 
 ## 2. Module manifest
 
-**Actual `data` list differs**: `data/mail_template_data.xml` is still not
-included (§6/§14), and `wizards/pulse_run_wizard_views.xml`,
-`views/pulse_user_preferences_views.xml`, and `views/pulse_portal_templates.xml`
-don't exist since those components were replaced or not yet built (§7/§14).
-Built manifest instead includes `views/pulse_run_views.xml` (not in the
-list below) for the run list/form the "Run Now"/"History" buttons open into.
+**BUILT — this is the actual, current `__manifest__.py`**, not the
+original pre-build draft. Everything the draft called out as missing
+(`data/mail_template_data.xml`, the wizard, `pulse_user_preferences_views.xml`)
+is now in the `data` list; `views/pulse_detector_views.xml` and
+`views/pulse_portal_templates.xml` were dropped entirely rather than built
+(the former was dead code deleted during cleanup — its one purpose, letting
+an admin read a detector's description/rationale, was absorbed into the
+existing config form's Detectors tab instead, §4.3; the latter is the
+permanently-out-of-scope portal page, §14). `views/pulse_menus.xml` (built,
+holds the module's actual menu structure) replaces the never-built
+`views/pulse_portal_templates.xml`/menu file the original draft implied.
+`views/templates.xml` exists on disk but is dead scaffold, deliberately
+commented out below — never enabled, never deleted, since it costs nothing
+to leave as an example if someone wants a QWeb starting point later.
 
 ```python
 # pulse_digest/__manifest__.py
+
 {
     "name": "Pulse",
     "version": "19.0.0.0.1",  # beta until core spec complete; 18.0.0.0.1 on the 18 branch
@@ -131,10 +140,12 @@ Unlike Odoo's built-in digest (which reports aggregate KPIs), Pulse lists
 the specific records to act on, scoped per-user or per-company, delivered
 by email, in-app notification, or WhatsApp.
     """,
-    "author": "Anthony Adegbemi",
+    "author": "adibas03",
     "website": "https://github.com/adibas03/pulse_digest",
     "license": "LGPL-3",
     "category": "Productivity",
+
+    # any module necessary for this one to work correctly
     "depends": [
         "base",
         "mail",
@@ -142,32 +153,40 @@ by email, in-app notification, or WhatsApp.
         "sale_management",
         "crm",
     ],
-    "data": [
-        "security/pulse_security.xml",
-        "security/ir.model.access.csv",
-        "data/pulse_detector_data.xml",
-        "data/pulse_cron_data.xml",
-        "data/mail_template_data.xml",
+
+    # always loaded
+    'data': [
+        'security/pulse_security.xml',
+        'security/ir.model.access.csv',
+        "wizards/pulse_run_wizard_views.xml",
         "views/pulse_config_views.xml",
-        "views/pulse_detector_views.xml",
         "views/pulse_run_views.xml",
         "views/pulse_user_preferences_views.xml",
-        "views/pulse_menus.xml",
-        "views/pulse_portal_templates.xml",
-        "wizards/pulse_run_wizard_views.xml",
+        'views/pulse_menus.xml',
+        # 'views/templates.xml',
+        'data/pulse_detector_data.xml',
+        'data/pulse_cron_data.xml',
+        'data/mail_template_data.xml',
     ],
-    "demo": [
+    # only loaded in demonstration mode
+    'demo': [
         "demo/pulse_demo.xml",
     ],
     "assets": {
-        "web.assets_backend": [
-            "pulse_digest/static/src/**/*",
-        ],
+        # "web.assets_frontend": [
+        #     "stsatic/src/**/*",
+        # ],
     },
     "installable": True,
     "application": True,
 }
 ```
+
+`wizards/pulse_run_wizard_views.xml` loads *before* `views/pulse_config_views.xml`
+deliberately — the config view's "Run For User..." button references the
+wizard's action by XML id, which must already exist when that view loads.
+`assets` stays commented out — no custom JS/SCSS exists yet, and there's
+nothing to point it at until there is.
 
 Note on the manifest: per Odoo's vendor guidelines, `name` is short (5 chars, well under the 25-char limit), no adjectives, no company name. Version follows the major-minor-bugfix convention prefixed with the Odoo version.
 
@@ -175,87 +194,84 @@ Note on the manifest: per Odoo's vendor guidelines, `name` is short (5 chars, we
 
 ## 3. File tree
 
-**Not fully built**: `tests/` (entirely, §9), `wizards/` (entirely, §7/§14),
-`controllers/portal.py` + `views/pulse_portal_templates.xml` (§14),
-`views/pulse_user_preferences_views.xml` (no built preference fields to back
-it, §4.5), `static/description/index.html` and `static/src/scss/`. Also
-added but not shown below: `views/pulse_run_views.xml`.
+**BUILT — this is the real, current tree**, not the pre-build draft.
+`tests/` and `wizards/` are both fully built (the draft called both out as
+entirely missing). `controllers/`, `README.md`, `static/src/`, and
+`views/pulse_portal_templates.xml` were never built and never will be —
+no portal page is planned (§14), and no custom frontend JS/SCSS exists to
+justify a `static/src/` directory yet. `views/pulse_detector_views.xml`
+existed briefly, was found to be dead code (a broken, never-wired stub —
+see §4.3), and was deleted during cleanup rather than fixed.
 
 ```
 pulse_digest/
 ├── __init__.py
 ├── __manifest__.py
-├── README.md
 ├── data/
-│   ├── pulse_detector_data.xml      # Detector catalog seed records
-│   ├── pulse_cron_data.xml          # ir.cron records for daily run
-│   └── mail_template_data.xml       # Email templates (digest body, etc.)
+│   ├── pulse_detector_data.xml       # Detector catalog seed records
+│   ├── pulse_cron_data.xml           # ir.cron record for the hourly cron
+│   └── mail_template_data.xml        # The digest email template
 ├── demo/
-│   └── pulse_demo.xml               # Demo data: a config, an enabled detector
+│   └── pulse_demo.xml                # A working config + all 6 detectors linked
 ├── models/
 │   ├── __init__.py
-│   ├── constants.py                 # Shared enums (severity, etc.) — single source of truth
-│   ├── pulse_detector.py            # The detector catalog model
-│   ├── pulse_config.py              # Per-company configuration
-│   ├── pulse_config_detector.py     # Join: config <-> detector with overrides
-│   ├── pulse_run.py                 # Execution record
-│   ├── pulse_run_line.py            # Individual findings within a run
-│   ├── pulse_channel.py             # Channel registry + base class
-│   ├── res_users.py                 # User-level channel preferences
-│   └── detectors/                   # The actual detector implementations
+│   ├── constants.py                  # Shared enums (severity, etc.) — single source of truth
+│   ├── pulse_detector.py             # The detector catalog model
+│   ├── pulse_config.py               # Per-company configuration + the runner/dispatcher
+│   ├── pulse_config_detector.py      # Join: config <-> detector with overrides
+│   ├── pulse_run.py                  # Execution record; rendering + access re-check
+│   ├── pulse_run_line.py             # Individual findings within a run
+│   ├── pulse_channel.py              # Channel registry + base class
+│   ├── res_users.py                  # User-level channel preferences
+│   └── detectors/                    # The actual detector implementations
 │       ├── __init__.py
-│       ├── base.py                  # PulseDetectorBase abstract class
+│       ├── base.py                   # PulseDetectorBase, Scope, PulseFinding
 │       ├── account/
 │       │   ├── __init__.py
-│       │   ├── _common.py           # Shared account.move query fragments
+│       │   ├── _common.py            # Shared account.move query fragments
 │       │   ├── overdue_invoices.py
 │       │   ├── payment_delay_outlier.py
 │       │   └── credit_limit_breach.py
 │       └── sale/
 │           ├── __init__.py
-│           ├── _common.py           # Shared crm.lead query fragments
+│           ├── _common.py            # Shared crm.lead query fragments
 │           ├── stale_opportunities.py
 │           ├── deals_closing_today.py
 │           └── deal_velocity_drop.py
-├── controllers/
-│   ├── __init__.py
-│   └── portal.py                    # /my/pulse/<run_id> portal page
 ├── security/
-│   ├── pulse_security.xml           # Security groups, record rules
-│   └── ir.model.access.csv          # ACL matrix
+│   ├── pulse_security.xml            # Groups, record rules
+│   └── ir.model.access.csv           # ACL matrix
 ├── views/
 │   ├── pulse_config_views.xml
-│   ├── pulse_detector_views.xml
 │   ├── pulse_run_views.xml
 │   ├── pulse_user_preferences_views.xml
-│   ├── pulse_menus.xml
-│   └── pulse_portal_templates.xml   # QWeb templates for /my/pulse
+│   ├── pulse_menus.xml               # The module's actual menu structure
+│   └── templates.xml                 # Dead scaffold, commented out in the manifest — left as-is
 ├── static/
-│   ├── description/
-│   │   ├── icon.png                 # 256x256, the Pulse logo
-│   │   ├── index.html               # Apps store listing page
-│   │   └── screenshots/
-│   └── src/
-│       └── scss/
-│           └── pulse_digest.scss
+│   └── description/
+│       ├── icon.png
+│       ├── icon.svg
+│       └── glyph.svg
 ├── tests/
 │   ├── __init__.py
-│   ├── common.py                    # Test setUp helpers
+│   ├── common.py                     # Shared PulseTransactionCase fixture
 │   ├── test_detector_framework.py
-│   ├── test_detector_overdue_invoices.py
-│   ├── test_detector_payment_delay_outlier.py
-│   ├── test_detector_credit_limit_breach.py
-│   ├── test_detector_stale_opportunities.py
-│   ├── test_channel_dispatch.py
-│   ├── test_run_execution.py
-│   ├── test_per_user_filtering.py
-│   ├── test_security.py
+│   ├── test_detectors_accounting.py  # All 3 accounting detectors, one file
+│   ├── test_detectors_sales.py       # All 3 sales/CRM detectors, one file
+│   ├── test_run_execution.py         # run_digest/run_all_audiences, cron, exception isolation
+│   ├── test_security.py              # Three-tier groups, ACL, record rules (pulse.run + .line)
 │   ├── test_suppression_gate.py
-│   └── test_portal.py
+│   ├── test_channel_dispatch.py
+│   ├── test_pulse_run_wizard.py
+│   ├── test_pulse_run_fields.py      # Severity-stat computed fields
+│   ├── test_recipient_resolution.py  # company_recipient_ids/recipient_group_ids union
+│   └── test_digest_access_filtering.py  # The render-time access re-check
+├── scripts/
+│   └── run-tests.sh                  # Runs the suite in Docker against a real Odoo instance
 └── wizards/
     ├── __init__.py
-    ├── pulse_run_wizard.py          # "Run digest now" admin action
-    └── pulse_run_wizard_views.xml   # Wizard form with the "Run" button
+    ├── pulse_run_wizard.py           # "Run For User..." admin action
+    └── pulse_run_wizard_views.xml
 ```
 
 This structure follows OCA conventions, which is what an Odoo R&D reviewer will expect. Detectors split by app under `models/detectors/` makes adding a new app a contained operation in v1.1.
@@ -392,6 +408,17 @@ class PulseConfig(models.Model):
     ]
 ```
 
+**Actual, current model has more than this original design shows** (this
+block predates the build and was never rewritten line-for-line — see §14
+for the built features themselves): `email_enabled`/`inapp_enabled`/
+`whatsapp_enabled` (channel toggles, §6); `recipient_group_ids` — decouples
+"whose records a run is scoped to" from "who receives it," applies to
+company-wide *and* per-user runs alike, filtered to the run's own company
+(§6/§8.3); and `_check_company_recipients_set`, a Python `@api.constrains`
+(not a `_sql_constraints`/`models.Constraint`, since it spans two
+Many2many fields with no column to `CHECK` against) guaranteeing
+company-wide mode always has at least one recipient, user or group.
+
 ### 4.3 `pulse.config.detector` — the join
 
 ```python
@@ -415,6 +442,17 @@ class PulseConfigDetector(models.Model):
          "Each detector can only be linked once per config."),
     ]
 ```
+
+**Actual model also has** `description`/`rationale` — non-stored `related`
+passthroughs to `detector_id`'s own fields, exposed as opt-in
+(`optional="hide"`) columns on the config form's Detectors tab so an admin
+can read why a detector matters before enabling it, without cluttering the
+default view (§14's "role §6.x" discussion — this replaced an originally-
+sketched, never-built standalone `pulse_detector_views.xml` catalog
+browser with an addition to the existing tab instead).
+
+**No record rule on this model — a known, accepted, low-priority gap.**
+See §8.3.
 
 ### 4.4 `pulse.run` and `pulse.run.line`
 
@@ -493,13 +531,35 @@ class PulseRunLine(models.Model):
         help="If not delivered, why (e.g. 'recurrence backoff, age 12d').")
 ```
 
+**Actual models have considerably more than this original design shows**
+(never rewritten line-for-line as the build diverged — treat the above as
+historical intent, not current state). Note also that `delivered`/
+`suppression_reason` above don't exist on the built `pulse.run.line` at
+all (matches the comment already in that block — still true, unrelated to
+this note) — every detector's findings all deliver, full stop, since the
+suppression gate is a pass-through (§13/§14):
+
+- `pulse.run` inherits `mail.thread` (needed for `InAppChannel`/native
+  chatter, §6); `critical_count`/`warning_count`/`info_count`/
+  `worst_severity` (computed severity stats, driving the run list/form's
+  badges and decorations); `mail_count` (a smart button opening this run's
+  actual `mail.mail` records — §6's dispatch note on why per-recipient
+  delivery detail lives there rather than a purpose-built model);
+  `_filter_lines_readable_by`/`_render_digest_body` (the render-time
+  access re-check, §8.3); `get_run_url()` (replaces the never-built
+  `get_portal_url()` referenced in earlier drafts of this spec).
+- `pulse.run.line` has `severity_sequence` — a stored computed sort key
+  (worst-first: critical=0, warning=1, info=2), since a list view can't
+  order by an arbitrary Python dict the way `_render_digest_body`'s
+  in-memory sort can.
+
 ### 4.5 `res.users` extension — channel preferences
 
-**NOT YET BUILT.** `models/res_users.py` exists with the `_inherit = "res.users"`
-scaffold but every field below is commented out — no channel-preference
-fields exist on `res.users` yet. This blocks `WhatsAppChannel` (needs
-`pulse_phone`) and any future per-channel opt-out UI. Tracks with channel
-dispatch overall being unbuilt this iteration (§6/§14).
+**BUILT** — exactly as shown below. Exposed in the UI via
+`views/pulse_user_preferences_views.xml`, which extends both the
+self-service "Preferences" dialog and the admin-facing user form so a
+recipient can manage their own settings and an admin can set up a
+colleague's WhatsApp number directly.
 
 ```python
 class ResUsers(models.Model):
@@ -548,6 +608,14 @@ SEVERITIES = tuple(value for value, _label in SEVERITY_SELECTION)
 
 # Ordering helper — useful for sorting findings by urgency.
 SEVERITY_ORDER = {SEVERITY_INFO: 0, SEVERITY_WARNING: 1, SEVERITY_CRITICAL: 2}
+
+# Worst-first ordering for UI/digest display (critical shown first) — added
+# later, distinct from SEVERITY_ORDER above (ascending, for comparisons).
+# A real bug shipped from conflating the two: an early pulse_run.py import
+# aliased SEVERITY_ORDER for display purposes, silently sorting a run's
+# digest info-first instead of worst-first. Single source of truth for
+# both pulse.run._render_digest_body and pulse.run.line.severity_sequence.
+SEVERITY_DISPLAY_ORDER = {SEVERITY_CRITICAL: 0, SEVERITY_WARNING: 1, SEVERITY_INFO: 2}
 ```
 
 Hoist a value into `constants.py` only when it crosses a layer boundary. Severity crosses all four, so it qualifies. Values that live in a single layer (e.g. detector `technical_name` strings, which appear only in the catalog seed and the detector class) stay where they are — moving them here would just relocate clutter.
@@ -1341,20 +1409,15 @@ Six detectors. Four on by default (deterministic, low-noise). Two off by default
 
 ## 6. The channel dispatcher
 
-**NOT YET BUILT THIS ITERATION — still intended, see §14.** `models/pulse_channel.py` exists with the
-registry/base-class/three-channel shape below, but nothing calls it —
-`run_digest`/`run_all_audiences` compute and persist findings, then stop.
-There is no `_dispatch_run` anywhere. `EmailChannel` is otherwise correct but
-depends on `data/mail_template_data.xml`, which isn't in the manifest yet
-(§2). `InAppChannel` has a real bug: it calls `run.message_post(...)`, but
-`pulse.run` doesn't inherit `mail.thread`, so that method doesn't exist on
-it. `WhatsAppChannel` in the built code still uses the *original, uncorrected*
-API this section's Nov 2025 pass already flagged as wrong (`whatsapp.template
-._send_message(...)`, checking `"whatsapp.template" in env`) — the corrected
-version below was never actually applied to `pulse_channel.py`. It also
-depends on `res.users.pulse_phone` (§4.5, not built) and `pulse.run.
-get_portal_url()` (never defined). None of this is reachable today since
-nothing calls `send()`, but all three need fixing when dispatch gets wired.
+**BUILT.** `models/pulse_channel.py` has the registry/base-class/three-
+channel shape below, and `pulse.config._dispatch_run` (called from the end
+of `run_digest`) actually calls it. Every issue this section originally
+flagged is resolved: `data/mail_template_data.xml` is in the manifest;
+`pulse.run` inherits `mail.thread`, so `InAppChannel`'s `message_post()`
+works; `WhatsAppChannel` uses the corrected `whatsapp.composer`/
+`action_send_whatsapp_template()` API; `res.users.pulse_phone` (§4.5) is
+built; and `get_portal_url()` was replaced by `get_run_url()` (§14 — no
+portal page is planned, permanently).
 
 Same shape as the detector framework: registry pattern, base class, three implementations.
 
@@ -1375,16 +1438,25 @@ class PulseChannel:
 
 class EmailChannel(PulseChannel):
     TECHNICAL_NAME = "email"
+
     def send(self, env, recipient, run, body_html, subject):
         template = env.ref("pulse_digest.mail_template_pulse_digest")
+        base_url = env["ir.config_parameter"].sudo().get_param("web.base.url")
+        # base.action_res_users_my is the same action the "Preferences" menu
+        # item (avatar menu -> My Profile) opens — the self-service dialog
+        # views/pulse_user_preferences_views.xml extends with the channel
+        # fields, so this deep-links straight to the right place.
+        preferences_url = f"{base_url}/odoo/action-base.action_res_users_my"
         template.with_context(
             body_html=body_html,
             subject=subject,
+            preferences_url=preferences_url,
         ).send_mail(run.id, email_values={"email_to": recipient.email})
 
 
 class InAppChannel(PulseChannel):
     TECHNICAL_NAME = "inapp"
+
     def send(self, env, recipient, run, body_html, subject):
         # Post a mail.message to the user's inbox via the run record
         run.message_post(
@@ -1399,21 +1471,21 @@ class InAppChannel(PulseChannel):
 class WhatsAppChannel(PulseChannel):
     """WhatsApp delivery via Odoo's whatsapp.composer.
 
-    API verified against Odoo 19 sources (Nov 2025). The earlier draft used
-    `whatsapp.template._send_message(...)`, which does not exist — the
-    correct path is to create a `whatsapp.composer` record with context
-    pointing at the active model and IDs, then call
-    `action_send_whatsapp_template()`. Free-text variables are set via
-    typed fields on the composer (`free_text_1`, `free_text_2`, ...), NOT
-    a `wa_variable_ids` mapping, per the SaaS 19.1 forum guidance.
+    The correct API (odoo/odoo@19.0): create a whatsapp.composer record with
+    context pointing at the active model/ids, then call
+    action_send_whatsapp_template(). Free-text variables are set via typed
+    fields on the composer (free_text_1, free_text_2, ...), not a
+    template_variables dict — a `whatsapp.template._send_message(...)`
+    method does not exist.
 
-    Pre-approved template setup is a deployment concern:
-      1. Admin creates a `whatsapp.template` in the WhatsApp app pointing at
-         `pulse.run` as the model, with two free-text variables for the
-         portal URL and the finding count.
-      2. The template's XML id is stored in `ir.config_parameter` as
-         `pulse_digest.whatsapp_template_xmlid` so admins can swap templates
-         without code changes.
+    Pre-approved template setup is a deployment concern, not something this
+    module can seed automatically (Meta Business requires manual template
+    approval):
+      1. Admin creates a whatsapp.template in the WhatsApp app pointing at
+         pulse.run as the model, with two free-text variables (link, count).
+      2. The template's XML id is stored in ir.config_parameter as
+         pulse_digest.whatsapp_template_xmlid, so admins can swap templates
+         without code changes. Nothing is sent until this is configured.
     """
     TECHNICAL_NAME = "whatsapp"
 
@@ -1433,7 +1505,6 @@ class WhatsAppChannel(PulseChannel):
         if not template:
             return
 
-        portal_url = run.get_portal_url()
         composer = env["whatsapp.composer"].with_context(
             active_model="pulse.run",
             active_ids=run.ids,
@@ -1441,9 +1512,10 @@ class WhatsAppChannel(PulseChannel):
             "res_model": "pulse.run",
             "res_ids": str(run.ids),
             "wa_template_id": template.id,
-            # Free-text variables are positional on the composer; the
-            # template must declare them as free_text type, mapped 1:1.
-            "free_text_1": portal_url,
+            # get_run_url() is the intended link — no portal page exists or
+            # is planned; recipients are internal users with backend
+            # access, so the backend URL is the design, not a stand-in.
+            "free_text_1": run.get_run_url(),
             "free_text_2": str(len(run.line_ids)),
         })
         composer.action_send_whatsapp_template()
@@ -1452,9 +1524,11 @@ class WhatsAppChannel(PulseChannel):
 # Registry — populated at module init
 CHANNELS = {}
 
+
 def register_channel(cls):
     CHANNELS[cls.TECHNICAL_NAME] = cls()
     return cls
+
 
 register_channel(EmailChannel)
 register_channel(InAppChannel)
@@ -1462,6 +1536,39 @@ register_channel(WhatsAppChannel)
 ```
 
 A reviewer adding Slack/Telegram in v1.1 writes one class and one `register_channel` call. No core code changes.
+
+**`_dispatch_run` — the actual current design (real code differs from a
+literal walkthrough of the classes above, which only show one channel
+send).** For each recipient of a run (§4.2/§14 — `company_recipient_ids`,
+`recipient_group_ids`-resolved, or the run's own owner for a per-user run),
+`_dispatch_run`:
+
+1. Calls `pulse.run._filter_lines_readable_by(recipient)` — the render-time
+   access re-check (§8.3) — to get that recipient's own visible subset of
+   the run's findings, batched by `res_model` rather than one check per
+   line.
+2. Renders that recipient's own `body_html` via `_render_digest_body(lines)`
+   — once per recipient, not once for the whole run, since different
+   recipients can see different subsets. If any findings were filtered
+   out, the rendered body discloses a count ("N additional finding(s) not
+   shown — access restricted") rather than silently showing less than the
+   run actually found.
+3. For each channel, checks both the config-level toggle
+   (`email_enabled`/`inapp_enabled`/`whatsapp_enabled`) and the
+   recipient's own preference (`res.users.pulse_*_enabled`) — either side
+   can veto; sends only if both allow it and `channel.is_available(env)`.
+4. Sets `email_sent`/`inapp_sent`/`whatsapp_sent` (run-level, "sent to at
+   least one recipient") on success; logs and continues past a single
+   channel/recipient failure rather than raising, so one bad send can't
+   take down the rest of the run's dispatch.
+
+Every recipient of a non-empty run gets dispatched to, even one whose
+entire visible set ends up empty after filtering — the disclosure in
+step 2 is the signal, not a silent skip. Per-recipient delivery detail
+beyond the run-level flags is discoverable via the existing `mail.mail`
+queue and `run.message_ids` (a smart button on `pulse.run`'s form links to
+the former) rather than a purpose-built tracking model — see §8.3 for why
+that was the chosen trade-off.
 
 **Note on schema growth (per-channel fields):** each channel currently costs 3
 stored Boolean columns — `pulse.config.<channel>_enabled`,
@@ -1684,8 +1791,29 @@ configured time without double-firing. This is the standard Odoo pattern for
 - **Detector resolution lives on `pulse.detector`**, not as a `_resolve_detector_class` staticmethod on `pulse.config`. `pulse.detector._get_detector_class()` does the same `importlib` resolution, called as `detector_id._get_detector_class()`. Rationale: it's the catalog record's own dotted path being resolved, so the method belongs with the data it acts on.
 - **No `with_user(user)` context switch for per-user runs.** The design above ran each per-user computation as that user (`self.with_user(user)._execute_one_run(...)`), which would apply that user's own record-rule restrictions during the detector's `search()` calls. The built version stays in the calling env throughout and relies entirely on each detector's own domain filtering (`apply_user_scope`, or a direct `user_id` domain term) to scope results — simpler, but doesn't get the extra safety net of the user's own access rights being enforced during computation. Worth revisiting if detectors are ever written against a model with meaningful record-rule restrictions beyond ownership.
 - **One `create()` per finding, not a single bulk `create(line_vals)`.** The N+1 discipline the original design calls for isn't implemented — `pulse.run.line` rows are created one at a time inside the loop. Correct, just not batched.
-- **No exception isolation yet — NEXT TASK, not yet built.** The design called for `run_digest`'s per-audience execution to be wrapped in try/except (mark the run `status="failed"`, re-raise) and for `_cron_run_digests`'s per-config loop to catch and log so one company's failure can't block another's. Neither exists yet: today, one detector raising inside `run_digest` propagates uncaught, leaves that run stuck at `status="running"` forever, and can abort the entire `_cron_run_digests` transaction for every other config being processed in the same cron tick. This is the immediate next piece of work.
-- **Manual trigger is a set of `pulse.config` action methods, not a wizard.** The file tree (§3) specifies `wizards/pulse_run_wizard.py` with its own form view. The built version instead adds `action_run_now(audience=None)`, `action_admin_run_now(audience=None, user_id=None)`, and `action_view_runs()` directly on `pulse.config`, all funneling their returned client action through a shared `_runs_action(domain_extra=None)` helper — a "Run Now" / "History" button pair in the config form header instead of a separate wizard screen. `action_run_now` restricts `audience` to `None`/`"company"` only (per-user manual triggers would need a user-picker UI that doesn't exist); `action_admin_run_now` is the fuller variant that does support targeting one specific user via `user_id`. No `wizards/` directory exists.
+- **Exception isolation — BUILT** (was the immediate next task in an earlier
+  draft of this section; no longer open). `run_digest` guards `run = None`
+  before its `try`, and its `except` only marks `status="failed"` +
+  `error_message` if `run` was actually created before re-raising — so a
+  `pulse.run.create()` failure itself (e.g. an `AccessError`) propagates
+  cleanly instead of masking itself as `UnboundLocalError` (a real bug this
+  exact guard was added to fix, caught by a security test that impersonated
+  a restricted user). `_cron_run_digests` wraps each config's
+  `run_all_audiences()` call in its own try/except, logging via
+  `_logger.exception` — one company's failure can't abort another's in the
+  same cron tick.
+- **Manual trigger — both the original design's action methods AND a
+  wizard exist, for different scopes.** `action_run_now(audience=None)`,
+  `action_admin_run_now(audience=None, user_id=None)`, and
+  `action_view_runs()` live directly on `pulse.config` (funneling through a
+  shared `_runs_action(domain_extra=None)` helper) — a "Run Now"/"History"
+  button pair in the config form header, admin-only and recipient-visible
+  respectively. `action_run_now` only supports company-wide manual
+  triggers; `action_admin_run_now` is the fuller variant `wizards/
+  pulse_run_wizard.py` (§14 — built, not in the original file tree) calls
+  to support targeting one specific user via a "Run For User..." button,
+  restricted to the config's own `user_group_id` membership and
+  re-validated server-side (`allowed_user_ids`).
 
 ---
 
@@ -1727,7 +1855,8 @@ of `privilege_id` pointing at this new model (§1b).
 | `pulse.config`          | ✓ read         | (inherits Viewer)      | ✓ all                              |
 | `pulse.config.detector` | ✓ read         | (inherits Viewer)      | ✓ all                              |
 | `pulse.run`             | –              | own only (record rule) | ✓ all                              |
-| `pulse.run.line`        | –              | via run                | ✓ all                              |
+| `pulse.run.line`        | –              | own run's lines only (record rule) | ✓ all                  |
+| `pulse.run.wizard`      | –              | –                       | ✓ all                              |
 
 Actual content-visibility (run results, findings) stays gated at the
 Recipient tier, unchanged from the original design — only the
@@ -1747,45 +1876,49 @@ only) OR (everything)` still resolves to everything for admins — the same
 mechanism already proven for `pulse.run` itself. This is purely a backend-
 viewing (who can open a run) control, independent of the point below.
 
-**Render-time re-check — RESOLVED: not needed, by design, not deferred.**
-A first pass (`pulse.run._filter_lines_readable_by`, rendering the digest
-body once per recipient, re-checking each line's underlying record access)
-was built and then reverted. The question it was trying to answer —
-"should a per-line access re-check gate what a group-forwarded recipient
-sees" — is now settled rather than open:
+**Render-time re-check — BUILT, after a reversal worth recording
+honestly.** This went through three states, not two, and the middle one
+was wrong in a way worth keeping visible rather than editing away:
 
-A per-line re-check and the company-membership filter `recipient_group_ids`
-already applies (§4.2, §6) are answering *different questions*. The company
-filter catches an accident — someone technically being in a recipient
-group for unrelated reasons while belonging to a different company than
-the run — which the admin adding that group did not intend. A per-line
-re-check would instead override something the admin *did* intend: they
-chose that group as a recipient, which already *is* the access decision,
-identically to hand-picking individuals into `company_recipient_ids`.
-Re-checking each line on top of that would undermine cases the feature
-exists for (e.g. a manager deliberately wanting cross-pipeline visibility
-a per-line check would partially strip away), not protect against
-anything the admin didn't choose.
+1. First built: rendered the digest body once per recipient, re-checking
+   each line's underlying record access — but only conceived of as
+   protecting against *group-forwarded* recipients specifically.
+2. Reverted, and the conclusion at the time was "not needed, by design":
+   `company_recipient_ids` and `recipient_group_ids` are both explicit,
+   admin-curated access decisions (hand-picking a person, or choosing a
+   group, already *is* the decision to notify them), so re-checking each
+   line on top of that seemed to undermine the feature rather than protect
+   anything — e.g. a manager deliberately wanting cross-pipeline
+   visibility, which a per-line check would partially strip away.
+3. **That conclusion was incomplete, caught by external review, and
+   reversed back to built.** It correctly settled *who should receive
+   digests* but silently assumed that answered a second, different
+   question it never actually addressed: *can digest content exceed what
+   a recipient could otherwise open via their own, completely unrelated
+   Odoo permissions* — e.g. CRM's standard "Sales / User: Own Documents
+   Only" security group, which blocks a salesperson from opening a
+   colleague's `crm.lead` directly. A company-wide run naming that
+   colleague's deal (`res_name`, `summary`, exact figures) would leak it
+   regardless of whether the recipient "should" get the digest at all.
+   That's a real, common Odoo configuration, not a hypothetical — and it
+   applies to hand-picked `company_recipient_ids` individuals just as much
+   as to `recipient_group_ids` members, so the fix (`_filter_lines_
+   readable_by`, §6) applies uniformly to every recipient category,
+   including a per-user run's own owner (a harmless no-op there, since
+   `apply_user_scope` already limits their run to records they own).
 
-This holds even for the sharper case this section originally raised as a
-reason to revisit: `recipient_group_ids` also applies to per-user runs, so
-a group can receive one specific person's individually-scoped digest (their
-own overdue invoices, their own pipeline) — not just company-wide
-aggregate data. That's disclosed, not hidden: `recipient_group_ids`'s help
-text says plainly that both company-wide and per-user runs get forwarded.
-An admin configuring it knows what they're opting into — the same trust
-boundary as every other admin-only config field in this module (channel
-toggles, detector thresholds), enforced the same way (ACL: only
-`group_pulse_admin` can write to `pulse.config` at all).
+Batched by `res_model` (one `search()` per distinct model present,
+evaluated as that recipient) rather than one check per line, since a
+company-wide run can have many recipients. A recipient whose entire
+visible set ends up empty still gets dispatched to — `_render_digest_body`
+discloses a hidden count rather than the run silently skipping them (§6).
 
 Original risk this section is about: a `pulse.run.line` references
-arbitrary `res_model` + `res_id`. Without the record rule above, a user
-able to read a line they shouldn't could have a record's name/summary
-leaked via the `res_name`/`summary` text. The record rule closes the
-backend-viewing half of that risk; the render-time half (a legitimately-
-visible line naming a record a specific *group-forwarded* recipient can't
-independently open) is closed by design rather than by code, per the
-resolution above — deliberate, not an oversight.
+arbitrary `res_model` + `res_id`. The record rule (above) closes the
+backend-viewing half — who can open a run at all. `_filter_lines_
+readable_by` closes the render-time half — whether a legitimately-visible
+line can still name a record the specific recipient can't independently
+open. Both are needed; neither substitutes for the other.
 
 **A parallel gap in `pulse.config.detector` — found, deliberately left
 open, low priority.** Same shape as the `pulse.run.line` gap above (ACL
@@ -1828,7 +1961,7 @@ Pulse group.
 
 ## 9. Test plan
 
-**BUILT.** `tests/` exists with 9 files (plus `common.py` for shared fixtures) and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
+**BUILT.** `tests/` exists with 12 files (plus `common.py` for shared fixtures), 155 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
 
 Tests live in `tests/`.
 
@@ -1840,11 +1973,13 @@ Tests live in `tests/`.
 | `test_detectors_accounting.py`  | The three accounting detectors (`overdue_invoices`, `payment_delay_outlier`, `credit_limit_breach`): severity buckets against `SEVERITY_*` constants, statistical baseline/z-score behavior, `with_company` correctness across companies, the no-salesperson exclusion from per-user runs, user-scope filtering                                                |
 | `test_detectors_sales.py`       | The three sales/CRM detectors (`stale_opportunities`, `deals_closing_today`, `deal_velocity_drop`): same shape of coverage as the accounting file, scoped to `crm.lead`                                                                                                                                                                                          |
 | `test_run_execution.py`         | `run_digest`/`run_all_audiences`, per-hour dedup (including per-user scoping and the `force` bypass), `_cron_is_due`/`_cron_run_digests` gating, and exception isolation — a failing detector marks its run failed without killing the process, and one config's failure doesn't block another company's cron tick                                             |
-| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); ACL and the "own per-user runs only" record rule enforced per tier; non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both                                 |
+| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); ACL and the "own per-user runs only" record rule enforced per tier on both `pulse.run` *and* `pulse.run.line` (a recipient can't read another run's lines directly via search, not just through the nested form view); non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both                                 |
 | `test_suppression_gate.py`      | **Scope reduced this iteration** (backoff schedule shelved — see §14): self-limiting detectors (`SUPPRESSIBLE = False`) always deliver; `SUPPRESSIBLE = True` + `AGE_FIELD = None` always delivers (the credit_limit_breach case) — the gate is a pass-through for every v1 combination. Deferred to the version that ships the backoff: phase-schedule correctness, the 7-day cap, missing/null anchor defaulting to deliver, and `suppression_reason` population. |
-| `test_channel_dispatch.py`      | `_dispatch_run`'s config-level × user-level channel gate; `email_sent`/`inapp_sent`/`whatsapp_sent` verified against the real `mail.mail` queue and `run.message_ids`, not just the flags; WhatsApp's no-op when the `whatsapp` module isn't installed; per-channel and per-recipient failure isolation via a fake channel patched into the registry            |
-| `test_pulse_run_wizard.py`      | `allowed_user_ids` reflects the config's `user_group_id`; `action_run` raises on a missing `user_id` for per-user audience and delegates correctly to `action_admin_run_now` for both audiences; pins the known gap that `user_id` isn't re-validated server-side against the allowed group                                                                    |
+| `test_channel_dispatch.py`      | `_dispatch_run`'s config-level × user-level channel gate; `email_sent`/`inapp_sent`/`whatsapp_sent` verified against the real `mail.mail` queue and `run.message_ids`, not just the flags; WhatsApp's no-op when the `whatsapp` module isn't installed; per-channel and per-recipient failure isolation via a fake channel patched into the registry; the render-time re-check's dispatch-level integration — a recipient with a fully-restricted finding still gets dispatched to (no silent skip) and the delivered message discloses the hidden count without leaking the restricted content |
+| `test_pulse_run_wizard.py`      | `allowed_user_ids` reflects the config's `user_group_id`; `action_run` raises on a missing `user_id` for per-user audience, raises if `user_id` is set but outside `allowed_user_ids` (server-side re-validation added — no longer just a client-side view domain), and delegates correctly to `action_admin_run_now` for both audiences                                                                    |
 | `test_pulse_run_fields.py`      | `pulse.run`'s severity-stat computed fields (`critical_count`/`warning_count`/`info_count`/`worst_severity`) and `pulse.run.line.severity_sequence`, including worst-first ordering via `search(..., order="severity_sequence")`                                                                                                                                |
+| `test_recipient_resolution.py`  | Who ends up as `run_digest`'s `recipients` — the `company_recipient_ids`/`recipient_group_ids` union for company-wide *and* per-user runs (the "decouple run from recipient" forwarding case), the multi-company membership filter (including a group with zero same-company members), live/dynamic group-membership resolution, and all three states of the `_check_company_recipients_set` constraint |
+| `test_digest_access_filtering.py` | Unit-level coverage of the render-time re-check (§8.3): `_filter_lines_readable_by` (readable/unreadable/admin-override/stale-`res_model`/multi-model batching, using `pulse.run`'s own record rule as a reliable restricted target rather than depending on another app's default ACL setup) and `_render_digest_body`'s hidden-count disclosure (no notice, partial-hidden, all-hidden, truly-empty-run, and that omitting `lines` raises `TypeError` rather than silently rendering everything) |
 
 ### 9.2 Tour test
 
@@ -1957,9 +2092,9 @@ These are deliberate non-goals for v1 so they don't creep:
 - **Channel dispatch (email/in-app/WhatsApp delivery) — still intended, not ready yet.** The channel classes exist (§6) but nothing calls them; `run_digest` computes and persists findings, then stops. Also blocked on: `data/mail_template_data.xml` not in the manifest, `pulse.run` not inheriting `mail.thread` (breaks `InAppChannel`), `WhatsAppChannel` still on the pre-correction API, and `res.users` channel-preference fields (§4.5) not built. Immediate next-next task after exception isolation below.
 - **Full cron/execution robustness (exception isolation) — still intended, not ready yet, immediate next task.** The cron mechanics themselves are built and working (§7: `_cron_run_digests`/`_cron_is_due`/`run_digest`/`run_all_audiences`), but the per-run and per-config try/except (§7's implementation notes) that make the pipeline production-safe were never added. One bad detector currently aborts its whole run permanently and can take down every other company's run in the same cron tick.
 - **Portal page — permanently out of scope, not deferred.** The file tree's `controllers/portal.py` (`/my/pulse/<run_id>`) and `views/pulse_portal_templates.xml` will not be built. Every Pulse recipient is an internal Odoo user with backend access (`group_pulse_recipient`/`group_pulse_admin` are implied by `base.group_user`) — there's no external/customer audience for this module, so the portal infrastructure (built for users *without* backend accounts, and requiring the `portal` module dependency this manifest deliberately doesn't declare) doesn't match the actual need. The polished backend `pulse.run` list/form view (§7) plus `get_run_url()` pointing at it is the intended design, not a stand-in.
-- **Manual per-user trigger wizard — built.** `wizards/pulse_run_wizard.py` + `wizards/pulse_run_wizard_views.xml` expose `pulse.config.action_admin_run_now`'s existing per-user targeting (previously only reachable at the model layer) via a "Run For User..." header button on `pulse.config`'s form, admin-only. The wizard restricts `user_id` to the config's own `user_group_id` membership so an admin can't accidentally trigger a run for someone the config never intended to include.
-- **`pulse.run.line` access re-check on render, and its own record rule — both resolved.** See §8.3: the record rule is built; the render-time re-check was decided *not* needed, by design, rather than left open.
-- **Group-based recipients (`recipient_group_ids`) — built.** `pulse.config.recipient_group_ids` (Many2many `res.groups`) decouples "whose records a run is scoped to" from "who receives it": every member of a linked group who belongs to the run's own company is unioned into that run's recipients, for company-wide *and* per-user runs alike — resolved live at dispatch time, no config edit needed when group membership changes. `company_recipient_ids` (individual users) stays company-wide-specific and unchanged; `recipient_group_ids` is audience-agnostic. See §6/§8.3 for the access-model reasoning (group membership is the deliberate access decision, same trust tier as `company_recipient_ids`) and `pulse.config._check_company_recipients_set` for the save-time guarantee that company-wide mode always has at least one recipient (user or group).
+- **Manual per-user trigger wizard — built.** `wizards/pulse_run_wizard.py` + `wizards/pulse_run_wizard_views.xml` expose `pulse.config.action_admin_run_now`'s existing per-user targeting (previously only reachable at the model layer) via a "Run For User..." header button on `pulse.config`'s form, admin-only. The wizard restricts `user_id` to the config's own `user_group_id` membership so an admin can't accidentally trigger a run for someone the config never intended to include — originally enforced only client-side by the view's domain, `action_run` now re-validates `user_id` against `allowed_user_ids` itself and raises `UserError` if it's outside the group, so the restriction holds even against direct ORM/RPC calls that bypass the wizard form.
+- **`pulse.run.line` access re-check on render, and its own record rule — both built.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete.
+- **Group-based recipients (`recipient_group_ids`) — built.** `pulse.config.recipient_group_ids` (Many2many `res.groups`) decouples "whose records a run is scoped to" from "who receives it": every member of a linked group who belongs to the run's own company is unioned into that run's recipients, for company-wide *and* per-user runs alike — resolved live at dispatch time, no config edit needed when group membership changes. `company_recipient_ids` (individual users) stays company-wide-specific and unchanged; `recipient_group_ids` is audience-agnostic. Group membership deciding *who receives* a digest is still the deliberate access decision (same trust tier as `company_recipient_ids`) — but that's a separate question from whether digest *content* can exceed what a specific recipient could otherwise read, which is what `_filter_lines_readable_by`'s render-time re-check (§6/§8.3) actually closes. See `pulse.config._check_company_recipients_set` for the save-time guarantee that company-wide mode always has at least one recipient (user or group).
 - **v1.1 idea, not started: per-group cross-company override for `recipient_group_ids`.** Today every group-forwarded recipient is filtered to the run's own company, unconditionally — correct for the common case, but blocks a genuine use case: a holding-company/multi-entity setup wanting one group (e.g. an executive team) to receive digests across every subsidiary company regardless of the run's company. Can't be a single global toggle, since a config might reasonably want some linked groups company-filtered and others not — would need `recipient_group_ids` to move from a plain Many2many to a proper line/join model (config + group + a per-line "ignore company boundary" flag), mirroring how `pulse.config.detector` already pairs a config with per-line settings.
 
 Pin this list to the GitHub repo as a README section. It signals discipline.

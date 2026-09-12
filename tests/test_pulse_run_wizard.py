@@ -45,21 +45,17 @@ class TestPulseRunWizard(PulseTransactionCase):
         self.assertEqual(run.audience, "user")
         self.assertEqual(run.user_id, self.user_a)
 
-    def test_action_run_does_not_server_side_validate_user_in_allowed_group(self):
-        """Known, accepted gap (as of this iteration): user_id's restriction
-        to config.user_group_id.all_user_ids is enforced only by the view's
-        domain (client-side). Nothing in action_run re-checks it, so a user
-        outside the group can still be targeted if the record is created/
-        called directly (ORM, RPC) rather than through the wizard form. This
-        test pins today's actual behavior so a future tightening is a
-        deliberate, visible change to this test — not silent."""
+    def test_action_run_rejects_user_id_outside_allowed_group(self):
+        """Was previously a known, accepted gap (user_id's restriction to
+        config.user_group_id.all_user_ids was enforced only by the view's
+        domain, client-side, with nothing re-checking it server-side).
+        action_run now re-validates user_id against allowed_user_ids
+        itself, so a user outside the group can't be targeted even via
+        direct ORM/RPC calls that bypass the wizard form."""
         outsider = self._make_user(
             "Outsider", "pulse_outsider", self.env.ref("base.group_user"))
         self.assertNotIn(outsider, self.config.user_group_id.all_user_ids)
 
         wizard = self._make_wizard(audience="user", user_id=outsider.id)
-        wizard.action_run()  # does not raise today
-
-        run = self.env["pulse.run"].search(
-            [("config_id", "=", self.config.id)], order="id desc", limit=1)
-        self.assertEqual(run.user_id, outsider)
+        with self.assertRaises(UserError):
+            wizard.action_run()
