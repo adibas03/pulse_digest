@@ -26,8 +26,7 @@
         <record id="mail_template_pulse_digest" model="mail.template">
             <field name="name">Pulse: Daily Digest</field>
             <field name="model_id" ref="model_pulse_run" />
-            <field name="subject">{{ ctx.get('subject') or 'Pulse Digest — ' + (object.started_at
-                and object.started_at.strftime('%Y-%m-%d') or '') }}</field>
+            <field name="subject">{{ ctx.get('subject') or 'Pulse Digest — ' + (object.started_at and object.started_at.strftime('%Y-%m-%d') or '') }}</field>
             <field name="email_from">{{ (object.company_id.email or user.email) }}</field>
             <field name="email_to">{{ ctx.get('email_to') or '' }}</field>
             <field name="auto_delete" eval="False" />
