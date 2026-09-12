@@ -6,7 +6,8 @@ class PulseRunWizard(models.TransientModel):
     _name = "pulse.run.wizard"
     _description = "Run Pulse Digest Now"
 
-    config_id = fields.Many2one("pulse.config", required=True, ondelete="cascade")
+    config_id = fields.Many2one(
+        "pulse.config", required=True, ondelete="cascade")
     audience = fields.Selection([
         ("company", "Company-wide"),
         ("user", "Specific user"),
@@ -25,8 +26,13 @@ class PulseRunWizard(models.TransientModel):
 
     def action_run(self):
         self.ensure_one()
-        if self.audience == "user" and not self.user_id:
-            raise UserError(_("Select a user to run a per-user digest for."))
+        if self.audience == "user":
+            if not self.user_id:
+                raise UserError(
+                    _("Select a user to run a per-user digest for."))
+            if self.user_id not in self.allowed_user_ids:
+                raise UserError(
+                    _("%s is not in this config's recipient group.") % self.user_id.name)
         return self.config_id.action_admin_run_now(
             audience=self.audience,
             user_id=self.user_id.id if self.audience == "user" else None,
