@@ -2,22 +2,27 @@
 <!--
   Pulse — Security groups and record rules
 
-  Two groups:
-    group_pulse_recipient — base user. Receives per-user digests. Sees own
-                            runs only (enforced by record rule below). Can
-                            edit own res.users channel preferences.
+  Three tiers, each implying the one below:
+    group_pulse_viewer    — implied by base.group_user (every internal user).
+                            Read-only view of the config and detector
+                            catalog, and — via pulse_run_user_rule — of the
+                            runs they are a recipient of.
+    group_pulse_recipient — implies viewer. Can edit own res.users channel
+                            preferences.
     group_pulse_admin     — implies recipient. Configures detectors, recipient
-                            lists, schedules. Sees ALL runs.
+                            lists, schedules. Sees ALL runs and raw findings.
 
-  Both belong to a Pulse category so they appear cleanly under
-  Settings → Users & Companies → Users → Other rights.
+  All three belong to one Pulse privilege so they appear together under
+  Settings → Users & Companies → Users → Access Rights.
 
   Record rules:
-    - pulse_run_user_rule: a recipient can only see runs that are
-      audience='user' AND user_id == self. Without this they'd see every
-      run on the system, including company-wide ones that may contain
-      records they have no permission to read.
-    - admins are not constrained by the rule (groups list excludes them).
+    - pulse_run_user_rule: a user sees only the runs they are a recipient
+      of — their own per-user runs, company-wide runs they are a listed
+      recipient of, and any run of a config whose recipient groups they
+      belong to. Attached at the Viewer tier (see the rule's own comment).
+    - admins see everything via their own explicit rule.
+    - pulse.run.line is admin-only; non-admins read findings through the
+      access-filtered pulse.run.digest_html instead.
 
   Note on record rules vs ACL: ACL says WHICH MODELS a group can touch;
   record rules say WHICH ROWS. Both are needed — leaving either off would
@@ -93,12 +98,27 @@
         <!-- Record rules                                                 -->
         <!-- ============================================================ -->
 
-        <!-- Recipients only see their own per-user runs. -->
+        <!-- A run is visible to the people it is actually for, not to a
+             tier of user. Attached to group_pulse_viewer (every internal
+             user) on purpose: ACL read on pulse.run is granted at that
+             tier, and Odoo only restricts rows through rules that apply to
+             the user's groups — with no non-global rule attached at this
+             level, everyone would see every run in their company. Live
+             against the config (no per-run snapshot), so it follows group
+             membership the same way dispatch does:
+               - a per-user run is visible to its own owner;
+               - a company-wide run to company_recipient_ids;
+               - any run to members of the config's recipient_group_ids.
+             The company boundary comes from pulse_run_company_rule below
+             (active companies), not from this rule. -->
         <record id="pulse_run_user_rule" model="ir.rule">
-            <field name="name">Pulse Run: own runs only (recipients)</field>
+            <field name="name">Pulse Run: runs I am a recipient of</field>
             <field name="model_id" ref="model_pulse_run" />
-            <field name="domain_force">[('user_id', '=', user.id), ('audience', '=', 'user')]</field>
-            <field name="groups" eval="[(4, ref('group_pulse_recipient'))]" />
+            <field name="domain_force">['|', '|',
+                '&amp;', ('audience', '=', 'user'), ('user_id', '=', user.id),
+                '&amp;', ('audience', '=', 'company'), ('config_id.company_recipient_ids', 'in', [user.id]),
+                ('config_id.recipient_group_ids.all_user_ids', 'in', [user.id])]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_viewer'))]" />
             <field name="perm_read" eval="True" />
             <field name="perm_write" eval="False" />
             <field name="perm_create" eval="False" />
@@ -134,25 +154,12 @@
             <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
 
-        <!-- pulse.run.line has no user_id/audience of its own — it mirrors
-             pulse_run_user_rule above by traversing run_id. Without this,
-             the ACL alone (read=1 for every Recipient, no row scoping) lets
-             a recipient read ANY run's lines directly (e.g. via RPC/search
-             with a different run_id), not just runs they're allowed to see
-             through the nested form view — the gap §8.3 of the spec flagged
-             as "harmless today only because of how it's currently reached,"
-             which is not a real security boundary. -->
-        <record id="pulse_run_line_user_rule" model="ir.rule">
-            <field name="name">Pulse Run Line: own runs only (recipients)</field>
-            <field name="model_id" ref="model_pulse_run_line" />
-            <field name="domain_force">[('run_id.user_id', '=', user.id), ('run_id.audience', '=', 'user')]</field>
-            <field name="groups" eval="[(4, ref('group_pulse_recipient'))]" />
-            <field name="perm_read" eval="True" />
-            <field name="perm_write" eval="False" />
-            <field name="perm_create" eval="False" />
-            <field name="perm_unlink" eval="False" />
-        </record>
-
+        <!-- pulse.run.line is admin-only: only group_pulse_admin has an ACL
+             row, so no per-user row rule is needed. Raw findings can name
+             records a recipient has no right to read (e.g. a colleague's
+             deal under CRM's "Own Documents Only"); non-admins see their
+             findings only through pulse.run.digest_html, which applies the
+             same per-recipient access filter as the delivered digest. -->
         <record id="pulse_run_line_admin_rule" model="ir.rule">
             <field name="name">Pulse Run Line: all lines (admins)</field>
             <field name="model_id" ref="model_pulse_run_line" />

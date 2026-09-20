@@ -165,7 +165,7 @@ class PulseConfig(models.Model):
     def _compute_is_user_recipient(self):
         is_admin = self.env.user.has_group("pulse_digest.group_pulse_admin")
         for config in self:
-            recipient_group_users = config.recipient_group_ids.all_user_ids.filtered(
+            recipient_group_users = config.sudo().recipient_group_ids.all_user_ids.filtered(
                 lambda u: config.company_id in u.company_ids)
 
             match config.digest_mode:

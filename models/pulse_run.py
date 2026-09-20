@@ -53,11 +53,30 @@ class PulseRun(models.Model):
     inapp_sent = fields.Boolean()
     whatsapp_sent = fields.Boolean()
     mail_count = fields.Integer(compute="_compute_mail_count")
+    # sanitize=False: the body is built by _render_digest_body from escaped
+    # Markup we control, and sanitizing would strip its inline styles.
+    digest_html = fields.Html(
+        compute="_compute_digest_html", sanitize=False,
+        help="This run's findings as the current user is allowed to see "
+             "them — the same per-recipient access filter and hidden-count "
+             "notice as the delivered digest. What non-admins see in place "
+             "of the raw findings list, which is admin-only.")
 
     @api.depends("line_ids")
     def _compute_line_count(self):
         for run in self:
             run.line_count = len(run.line_ids)
+
+    @api.depends("line_ids")
+    @api.depends_context("uid")
+    def _compute_digest_html(self):
+        for run in self:
+            # Lines are read via sudo — non-admins have no pulse.run.line
+            # access at all — but visibility is decided against the real
+            # viewer, so nothing beyond what they may read is rendered.
+            sudo_run = run.sudo()
+            visible = sudo_run._filter_lines_readable_by(self.env.user)
+            run.digest_html = sudo_run._render_digest_body(visible)
 
     def _compute_mail_count(self):
         # No stored relation from pulse.run to mail.mail — EmailChannel.
