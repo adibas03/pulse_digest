@@ -17,7 +17,9 @@
                             context="{'default_config_id': id}" />
                         <button name="action_view_runs" type="object" string="History"
                             class="btn-secondary"
-                            groups="pulse_digest.group_pulse_recipient" />
+                            invisible="is_user_recipient == False"
+                        />
+                        <!-- groups="pulse_digest.group_pulse_recipient" -->
                     </header>
                     <sheet>
                         <group>

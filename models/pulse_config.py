@@ -66,6 +66,9 @@ class PulseConfig(models.Model):
                                     string="User Digests to run (per-user mode)",
                                     default=lambda self: self.env.ref("pulse_digest.group_pulse_recipient"))
 
+    is_user_recipient = fields.Boolean(
+        string='User is recipient', compute="_compute_is_user_recipient", store=False)
+
     # Channels — company-level "does this digest use this channel at all,"
     # separate from each recipient's own pulse_*_enabled preference on
     # res.users (models/res_users.py). _dispatch_run only sends through a
@@ -157,6 +160,26 @@ class PulseConfig(models.Model):
         # suppression logic (pulse.finding.state lookup) belongs here.
         return True
 
+    @api.depends("digest_mode", "user_group_id", "recipient_group_ids", "company_recipient_ids")
+    @api.depends_context('uid')
+    def _compute_is_user_recipient(self):
+        is_admin = self.env.user.has_group("pulse_digest.group_pulse_admin")
+        for config in self:
+            recipient_group_users = config.recipient_group_ids.all_user_ids.filtered(
+                lambda u: config.company_id in u.company_ids)
+
+            match config.digest_mode:
+                case "per_user":
+                    recipients = config.user_group_id.all_user_ids | recipient_group_users
+                case "both":
+                    recipients = config.company_recipient_ids | config.user_group_id.all_user_ids | recipient_group_users
+                case "company":
+                    recipients = config.company_recipient_ids | recipient_group_users
+                case _:
+                    recipients = []
+
+            config.is_user_recipient = True if is_admin or config.env.user in recipients else False
+
     def run_digest(self, audience, user=None, force=False):
         """Execute all active, available detectors for one audience and persist
         the results as a pulse.run + pulse.run.line records."""
@@ -237,13 +260,16 @@ class PulseConfig(models.Model):
         # empty) recordsets — never None — so this is safe even when a
         # field is empty; the save-time constraint above is what actually
         # guarantees company-wide mode has at least one recipient.
+
         recipient_group_users = self.recipient_group_ids.all_user_ids.filtered(
             lambda u: company in u.company_ids)
         if user:
             recipients = user | recipient_group_users
         else:
             recipients = self.company_recipient_ids | recipient_group_users
+
         self._dispatch_run(run, recipients)
+
         return run
 
     def _dispatch_run(self, run, recipients):
