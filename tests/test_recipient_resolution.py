@@ -153,3 +153,100 @@ class TestRecipientResolution(PulseTransactionCase):
 
         recipients = self._run_digest_recipients("company")
         self.assertEqual(set(recipients.ids), {self.user_admin.id})
+
+
+class TestIsUserRecipient(PulseTransactionCase):
+    """pulse.config.is_user_recipient — the History button's gate: is the
+    *viewing* user an actual recipient of this config, mirroring dispatch's
+    resolution per digest_mode (plus admins). Non-stored and computed per
+    uid, so each test reads it as the user in question.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.team_group = cls.env["res.groups"].create({"name": "Test Team"})
+        cls.plain = cls._make_user(
+            "Plain Recipient Check", "pulse_is_recipient_plain",
+            cls.env.ref("base.group_user"))
+
+    def _flag(self, user):
+        return self.config.with_user(user).is_user_recipient
+
+    def test_admin_is_always_a_recipient(self):
+        self.config.company_recipient_ids = [(6, 0, [self.user_a.id])]
+        self.assertTrue(self._flag(self.user_admin))
+
+    def test_unlisted_internal_user_is_not_a_recipient(self):
+        self.config.company_recipient_ids = [(6, 0, [self.user_a.id])]
+        self.assertFalse(self._flag(self.plain))
+
+    def test_company_recipient_counts_in_company_mode(self):
+        self.config.write({
+            "digest_mode": "company",
+            "company_recipient_ids": [(6, 0, [self.plain.id])],
+        })
+        self.assertTrue(self._flag(self.plain))
+
+    def test_company_recipient_does_not_count_in_per_user_mode(self):
+        self.config.write({
+            "digest_mode": "per_user",
+            "company_recipient_ids": [(6, 0, [self.plain.id])],
+        })
+        self.assertFalse(self._flag(self.plain))
+
+    def test_user_group_member_counts_in_per_user_mode(self):
+        self.config.write({"digest_mode": "per_user"})
+        self.assertTrue(self._flag(self.user_a))
+        self.assertFalse(self._flag(self.plain))
+
+    def test_user_group_member_does_not_count_in_company_mode(self):
+        self.config.write({
+            "digest_mode": "company",
+            "company_recipient_ids": [(6, 0, [self.plain.id])],
+        })
+        self.assertFalse(self._flag(self.user_a))
+
+    def test_recipient_group_member_counts_in_every_mode(self):
+        self.team_group.user_ids = [(6, 0, [self.plain.id])]
+        self.env.flush_all()
+        for mode in ("company", "per_user", "both"):
+            self.config.write({
+                "digest_mode": mode,
+                "company_recipient_ids": [(5, 0, 0)],
+                "recipient_group_ids": [(6, 0, [self.team_group.id])],
+            })
+            self.assertTrue(self._flag(self.plain), mode)
+
+    def test_recipient_group_member_from_another_company_does_not_count(self):
+        other_company = self.env["res.company"].create({"name": "Other Co"})
+        outsider = self.env["res.users"].create({
+            "name": "Outsider",
+            "login": "pulse_is_recipient_outsider",
+            "email": "pulse_is_recipient_outsider@example.com",
+            "company_id": other_company.id,
+            "company_ids": [(6, 0, [other_company.id])],
+            "group_ids": [(4, self.env.ref("base.group_user").id)],
+        })
+        self.team_group.user_ids = [(6, 0, [self.plain.id, outsider.id])]
+        self.env.flush_all()
+        self.config.write({
+            "recipient_group_ids": [(6, 0, [self.team_group.id])],
+        })
+        self.assertTrue(self._flag(self.plain))
+        # The outsider can't open this config at all, so evaluate as them
+        # via sudo (uid preserved) — the compute must still say no,
+        # matching dispatch's company filter.
+        self.assertFalse(
+            self.config.with_user(outsider).sudo().is_user_recipient)
+
+    def test_result_follows_the_viewing_user_on_the_same_record(self):
+        self.config.write({
+            "digest_mode": "company",
+            "company_recipient_ids": [(6, 0, [self.plain.id])],
+        })
+        self.assertTrue(self._flag(self.plain))
+        self.assertFalse(self._flag(self.user_a))
+        # Read the first user again after the second — the per-uid cache
+        # must not have been overwritten.
+        self.assertTrue(self._flag(self.plain))

@@ -153,3 +153,89 @@ class TestRenderDigestBodyDisclosure(PulseTransactionCase):
         run, _lines = self._make_run_with_lines(1)
         with self.assertRaises(TypeError):
             run._render_digest_body()
+
+
+class TestDigestHtml(PulseTransactionCase):
+    """pulse.run.digest_html: what non-admins see instead of the raw
+    (admin-only) findings list — the same per-recipient access filter and
+    hidden-count disclosure as the delivered digest, computed per viewing
+    user. Restricted targets reuse pulse.run's own record rule, as above.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.detector = cls.env["pulse.detector"].create({
+            "name": "Test Fixture Detector",
+            "technical_name": "test.digest_html_fixture",
+            "category": "accounting",
+            "detector_class": "x.y.Z",  # never resolved
+        })
+        cls.plain = cls._make_user(
+            "Digest Plain", "pulse_digest_plain",
+            cls.env.ref("base.group_user"))
+
+    def _make_run(self, owner, findings):
+        """A per-user run for `owner` with (summary, res_model, res_id) lines."""
+        run = self.env["pulse.run"].create({
+            "config_id": self.config.id,
+            "audience": "user",
+            "user_id": owner.id,
+        })
+        for summary, res_model, res_id in findings:
+            self.env["pulse.run.line"].create({
+                "run_id": run.id,
+                "detector_id": self.detector.id,
+                "res_model": res_model,
+                "res_id": res_id,
+                "res_name": "Test",
+                "summary": summary,
+            })
+        return run
+
+    def _mixed_run(self):
+        restricted_target = self.config.run_digest("user", user=self.user_b)
+        return self._make_run(self.user_a, [
+            ("readable finding", "res.partner",
+             self.env.company.partner_id.id),
+            ("restricted finding", "pulse.run", restricted_target.id),
+        ])
+
+    def test_viewer_without_line_access_reads_their_own_digest(self):
+        # A plain internal user has no pulse.run.line ACL at all; the
+        # digest still renders, since lines are read via sudo and only
+        # visibility is decided against the real viewer.
+        run = self._make_run(self.plain, [
+            ("readable finding", "res.partner",
+             self.env.company.partner_id.id)])
+        body = str(run.with_user(self.plain).digest_html)
+        self.assertIn("readable finding", body)
+        self.assertNotIn("not shown", body)
+
+    def test_restricted_finding_is_hidden_and_disclosed(self):
+        body = str(self._mixed_run().with_user(self.user_a).digest_html)
+        self.assertIn("readable finding", body)
+        self.assertNotIn("restricted finding", body)
+        self.assertIn("1 additional finding(s) not shown", body)
+
+    def test_admin_digest_shows_everything(self):
+        body = str(self._mixed_run().with_user(self.user_admin).digest_html)
+        self.assertIn("readable finding", body)
+        self.assertIn("restricted finding", body)
+        self.assertNotIn("not shown", body)
+
+    def test_digest_differs_per_viewing_user_on_the_same_record(self):
+        # Same record, read as two users in one transaction — the value
+        # must be cached per uid (depends_context('uid')), not shared.
+        run = self._mixed_run()
+        as_recipient = str(run.with_user(self.user_a).digest_html)
+        as_admin = str(run.with_user(self.user_admin).digest_html)
+        self.assertNotIn("restricted finding", as_recipient)
+        self.assertIn("restricted finding", as_admin)
+        self.assertNotIn(
+            "restricted finding", str(run.with_user(self.user_a).digest_html))
+
+    def test_run_with_no_findings_shows_the_generic_message(self):
+        run = self._make_run(self.plain, [])
+        body = str(run.with_user(self.plain).digest_html)
+        self.assertIn("No findings for this run", body)

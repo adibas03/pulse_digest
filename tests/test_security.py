@@ -124,13 +124,13 @@ class TestRecipientAccess(PulseTransactionCase):
 
 
 class TestRunLineAccess(PulseTransactionCase):
-    """pulse.run.line has no user_id/audience of its own — its record rules
-    (pulse_run_line_user_rule etc., security/pulse_security.xml) traverse
-    run_id.user_id/run_id.audience to mirror pulse_run_user_rule. Without
-    them, the ACL alone (read=1 for every Recipient, no row scoping) would
-    let a recipient read ANY run's lines directly via search — not just
-    runs they're allowed to see through the nested form view. These tests
-    exercise that enforcement directly, not just that the rule XML exists.
+    """pulse.run.line is admin-only: only group_pulse_admin has an ACL row.
+    Raw findings can name records a recipient has no right to read (e.g. a
+    colleague's deal under CRM's "Own Documents Only"), so non-admins —
+    Recipient tier included, even for their own runs — get no direct access
+    and read findings only through pulse.run.digest_html (see
+    test_digest_access_filtering.py). These tests pin that no non-admin
+    path to a line exists, not just that a rule XML record does.
     """
 
     @classmethod
@@ -153,26 +153,36 @@ class TestRunLineAccess(PulseTransactionCase):
             "summary": "a finding",
         })
 
-    def test_recipient_sees_own_per_user_run_lines(self):
+    def test_recipient_cannot_read_own_run_lines(self):
         run = self.config.run_digest("user", user=self.user_a)
         line = self._make_line(run)
-        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
-            [("id", "=", line.id)])
-        self.assertEqual(seen, line)
+        with self.assertRaises(AccessError):
+            self.env["pulse.run.line"].with_user(self.user_a).search(
+                [("id", "=", line.id)])
 
-    def test_recipient_does_not_see_other_users_run_lines(self):
+    def test_recipient_cannot_read_other_users_run_lines(self):
         run = self.config.run_digest("user", user=self.user_b)
         line = self._make_line(run)
-        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
-            [("id", "=", line.id)])
-        self.assertFalse(seen)
+        with self.assertRaises(AccessError):
+            line.with_user(self.user_a).read(["summary"])
 
-    def test_recipient_does_not_see_company_wide_run_lines(self):
+    def test_recipient_cannot_read_company_wide_run_lines(self):
         run = self.config.run_digest("company")
         line = self._make_line(run)
-        seen = self.env["pulse.run.line"].with_user(self.user_a).search(
-            [("id", "=", line.id)])
-        self.assertFalse(seen)
+        with self.assertRaises(AccessError):
+            line.with_user(self.user_a).read(["summary"])
+
+    def test_recipient_of_the_run_still_cannot_read_its_lines(self):
+        # Being the run's actual audience opens the run (see
+        # TestRunVisibility), never its raw lines.
+        run = self.config.run_digest("company")
+        self.config.company_recipient_ids = [(4, self.user_a.id)]
+        line = self._make_line(run)
+        self.assertEqual(
+            self.env["pulse.run"].with_user(self.user_a).search(
+                [("id", "=", run.id)]), run)
+        with self.assertRaises(AccessError):
+            line.with_user(self.user_a).read(["summary"])
 
     def test_plain_internal_user_cannot_read_run_lines(self):
         run = self.config.run_digest("user", user=self.user_a)
@@ -191,6 +201,107 @@ class TestRunLineAccess(PulseTransactionCase):
         seen = self.env["pulse.run.line"].with_user(self.user_admin).search(
             [("id", "in", [user_line.id, company_line.id])])
         self.assertEqual(len(seen), 2)
+
+
+class TestRunVisibility(PulseTransactionCase):
+    """pulse_run_user_rule (attached at the Viewer tier): a run is visible
+    to the people it is actually for — its own owner (per-user), listed
+    company_recipient_ids (company-wide), and members of the config's
+    recipient_group_ids (any run) — evaluated live against the config, and
+    regardless of Pulse tier. Everything here uses a plain internal user
+    (base.group_user only, so Viewer via implication and nothing more) to
+    prove access follows the audience, not a Recipient-tier grant.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.viewer = cls._make_user(
+            "Audience Viewer", "pulse_audience_viewer",
+            cls.env.ref("base.group_user"))
+        cls.audience = cls.env["res.groups"].create({"name": "Test Audience"})
+
+    def _visible(self, user, run):
+        return bool(self.env["pulse.run"].with_user(user).search(
+            [("id", "=", run.id)]))
+
+    def test_owner_without_recipient_tier_sees_own_per_user_run(self):
+        run = self.config.run_digest("user", user=self.viewer)
+        self.assertTrue(self._visible(self.viewer, run))
+
+    def test_unrelated_internal_user_sees_no_run(self):
+        company_run = self.config.run_digest("company")
+        user_run = self.config.run_digest("user", user=self.user_a)
+        self.assertFalse(self._visible(self.viewer, company_run))
+        self.assertFalse(self._visible(self.viewer, user_run))
+
+    def test_company_recipient_sees_company_run(self):
+        run = self.config.run_digest("company")
+        self.config.company_recipient_ids = [(4, self.viewer.id)]
+        self.assertTrue(self._visible(self.viewer, run))
+
+    def test_company_recipient_does_not_see_other_users_per_user_run(self):
+        # company_recipient_ids receive the company-wide digest only; it
+        # doesn't open anyone's individually-scoped run.
+        self.config.company_recipient_ids = [(4, self.viewer.id)]
+        run = self.config.run_digest("user", user=self.user_a)
+        self.assertFalse(self._visible(self.viewer, run))
+
+    def test_group_member_sees_company_and_forwarded_per_user_runs(self):
+        self.config.recipient_group_ids = [(6, 0, [self.audience.id])]
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        company_run = self.config.run_digest("company")
+        user_run = self.config.run_digest("user", user=self.user_a)
+        self.assertTrue(self._visible(self.viewer, company_run))
+        self.assertTrue(self._visible(self.viewer, user_run))
+
+    def test_access_follows_group_membership_live(self):
+        run = self.config.run_digest("company")
+        self.config.recipient_group_ids = [(6, 0, [self.audience.id])]
+        self.assertFalse(self._visible(self.viewer, run))
+
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        self.assertTrue(self._visible(self.viewer, run))
+
+        self.audience.user_ids = [(3, self.viewer.id)]
+        self.env.flush_all()
+        self.assertFalse(self._visible(self.viewer, run))
+
+    def test_removed_company_recipient_loses_access(self):
+        run = self.config.run_digest("company")
+        self.config.company_recipient_ids = [(4, self.viewer.id)]
+        self.assertTrue(self._visible(self.viewer, run))
+        self.config.company_recipient_ids = [(3, self.viewer.id)]
+        self.assertFalse(self._visible(self.viewer, run))
+
+    def test_group_member_from_another_company_cannot_see_run(self):
+        # The company boundary comes from the global company rule, not
+        # from pulse_run_user_rule itself.
+        other_company = self.env["res.company"].create({"name": "Other Co"})
+        outsider = self.env["res.users"].create({
+            "name": "Outsider",
+            "login": "pulse_run_outsider",
+            "email": "pulse_run_outsider@example.com",
+            "company_id": other_company.id,
+            "company_ids": [(6, 0, [other_company.id])],
+            "group_ids": [(4, self.env.ref("base.group_user").id)],
+        })
+        self.config.recipient_group_ids = [(6, 0, [self.audience.id])]
+        self.audience.user_ids = [(4, outsider.id)]
+        self.env.flush_all()
+        run = self.config.run_digest("company")
+        self.assertFalse(self._visible(outsider, run))
+
+    def test_visibility_is_read_only(self):
+        # The rule applies to reads only, and the Viewer ACL row is
+        # read-only — being a recipient never grants write/delete.
+        run = self.config.run_digest("user", user=self.viewer)
+        with self.assertRaises(AccessError):
+            run.with_user(self.viewer).write({"status": "failed"})
+        with self.assertRaises(AccessError):
+            run.with_user(self.viewer).unlink()
 
 
 class TestAdminAccess(PulseTransactionCase):
