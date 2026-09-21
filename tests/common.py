@@ -15,6 +15,10 @@ class PulseTransactionCase(TransactionCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        # Keep fixture configs free of the seeded default detectors, so
+        # tests link exactly the detectors they mean to.
+        cls.env = cls.env(context=dict(
+            cls.env.context, pulse_no_default_detectors=True))
 
         cls.group_viewer = cls.env.ref("pulse_digest.group_pulse_viewer")
         cls.group_recipient = cls.env.ref("pulse_digest.group_pulse_recipient")

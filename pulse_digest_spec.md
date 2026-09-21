@@ -402,10 +402,9 @@ class PulseConfig(models.Model):
     run_ids = fields.One2many("pulse.run", "config_id")
     last_run_date = fields.Datetime(compute="_compute_last_run", store=True)
 
-    _sql_constraints = [
-        ("company_uniq", "UNIQUE(company_id)",
-         "Only one Pulse config per company."),
-    ]
+    _company_name_uniq = models.Constraint(
+        "UNIQUE(company_id, name)",
+        "A company can't have two Pulse configs with the same name.")
 ```
 
 **Actual, current model has more than this original design shows** (this
@@ -423,7 +422,15 @@ definition — Odoo silently hides records of a model with an `active` field
 from an x2many unless the *field's own* context overrides it, and the
 view-level context attribute is unreliable for that (odoo/odoo#42784), so
 without it a deactivated detector line vanishes from the Detectors tab
-instead of showing unchecked. Also `is_user_recipient` — a non-stored, per-viewing-user
+instead of showing unchecked. It also has a field default,
+`_default_detector_lines`: one active line (no param overrides) per
+catalog detector with `is_default_enabled` whose `dependency_modules` are
+installed, so a new config starts with the default set — visible on the
+unsaved form for the admin to prune — instead of empty. Passing
+`detector_line_ids` in the create values, even `[(5, 0, 0)]`, opts out (the
+demo config does), and the context key `pulse_no_default_detectors` returns
+no lines (the test fixture sets it). Only new configs are seeded; existing
+ones are not backfilled. Also `is_user_recipient` — a non-stored, per-viewing-user
 (`depends_context('uid')`) Boolean gating the config form's "History"
 button: True for admins, and otherwise for a user who'd actually receive
 this config's digest, resolved per `digest_mode` (`company_recipient_ids`
@@ -2111,7 +2118,7 @@ companies.
 
 ## 9. Test plan
 
-**BUILT.** `tests/` exists with 11 test files (plus `common.py` for shared fixtures), 179 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
+**BUILT.** `tests/` exists with 13 test files (plus `common.py` for shared fixtures), 193 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
 
 Tests live in `tests/`.
 
@@ -2130,6 +2137,8 @@ Tests live in `tests/`.
 | `test_pulse_run_fields.py`      | `pulse.run`'s severity-stat computed fields (`critical_count`/`warning_count`/`info_count`/`worst_severity`) and `pulse.run.line.severity_sequence`, including worst-first ordering via `search(..., order="severity_sequence")`                                                                                                                                |
 | `test_recipient_resolution.py`  | Who ends up as `run_digest`'s `recipients` — the `company_recipient_ids`/`recipient_group_ids` union for company-wide *and* per-user runs (the "decouple run from recipient" forwarding case), the multi-company membership filter (including a group with zero same-company members), live/dynamic group-membership resolution, and all three states of the `_check_company_recipients_set` constraint; plus `TestIsUserRecipient` for the History-button gate — admin, per-`digest_mode` membership of `company_recipient_ids`/`user_group_id`/`recipient_group_ids`, another company's group member excluded, and the value following the viewing user on the same record (the per-uid cache) |
 | `test_digest_access_filtering.py` | Unit-level coverage of the render-time re-check (§8.3): `_filter_lines_readable_by` (readable/unreadable/admin-override/stale-`res_model`/multi-model batching, using `pulse.run`'s own record rule as a reliable restricted target rather than depending on another app's default ACL setup) and `_render_digest_body`'s hidden-count disclosure (no notice, partial-hidden, all-hidden, truly-empty-run, and that omitting `lines` raises `TypeError` rather than silently rendering everything); plus `TestDigestHtml` — a user with no line ACL still reads their own digest, a restricted finding is hidden and disclosed, admin sees everything, and the same record renders differently per viewing user |
+| `test_multi_config.py`          | Several configs in one company: `UNIQUE(company_id, name)` (same name rejected, allowed across companies), independent runs and recipients per config, and the config name in the delivered subject and header. |
+| `test_default_detectors.py`     | Default-detector seeding (`_default_detector_lines`): available `is_default_enabled` detectors are seeded as active lines with no overrides; non-default and missing-dependency ones are not; explicit `detector_line_ids` opts out; `default_get` shows the rows on the unsaved form; the shared fixture stays empty. |
 
 ### 9.2 Tour test
 
@@ -2246,6 +2255,7 @@ These are deliberate non-goals for v1 so they don't creep:
 - **`pulse.run.line` access re-check on render — built; `pulse.run.line` access itself — now admin-only.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete. The per-user record rule this bullet used to list for `pulse.run.line` was later removed along with its Recipient ACL row, once run access was opened to the audience (next bullet) and exposing raw lines to that audience would have reopened the same leak in the backend.
 - **Group-based recipients (`recipient_group_ids`) — built.** `pulse.config.recipient_group_ids` (Many2many `res.groups`) decouples "whose records a run is scoped to" from "who receives it": every member of a linked group who belongs to the run's own company is unioned into that run's recipients, for company-wide *and* per-user runs alike — resolved live at dispatch time, no config edit needed when group membership changes. `company_recipient_ids` (individual users) stays company-wide-specific and unchanged; `recipient_group_ids` is audience-agnostic. Group membership deciding *who receives* a digest is still the deliberate access decision (same trust tier as `company_recipient_ids`) — but that's a separate question from whether digest *content* can exceed what a specific recipient could otherwise read, which is what `_filter_lines_readable_by`'s render-time re-check (§6/§8.3) actually closes. See `pulse.config._check_company_recipients_set` for the save-time guarantee that company-wide mode always has at least one recipient (user or group).
 - **Run access follows the audience — built.** A dispatched recipient can now open the run their digest links to, regardless of Pulse tier: `pulse.run` is readable at the Viewer tier, with `pulse_run_user_rule` (attached at Viewer) limiting rows to own per-user runs, company-wide runs for listed `company_recipient_ids`, and any run for `recipient_group_ids` members — live against the config, deliberately not a per-run snapshot. Non-admins read findings through the per-user, access-filtered `pulse.run.digest_html`; raw `pulse.run.line` stays admin-only. The config form's History button (`pulse.config.is_user_recipient`) is the UI gate over the same audience. Known and accepted: chatter on the run isn't gated, and the run's stored counts/worst-severity cover findings the viewer can't see (§8.3).
+- **Several configs per company — built.** The old `UNIQUE(company_id)` is relaxed to `UNIQUE(company_id, name)` (§4.2), so a company can run one digest per team (e.g. sales and accounting), each with its own detectors, schedule and recipients (a new config is seeded with the `is_default_enabled` detectors, §4.2); the config name leads the digest subject and the email header. The cron, dedup, `last_run_date`, run visibility and the History gate were already per config. Caveats: the digest mail template is `noupdate="1"`, so an existing database keeps the old hardcoded header until the template record is edited or reset; per-user channel preferences on `res.users` stay all-or-nothing across configs; and a per-user run scopes by the user's `company_id`, not the config's.
 - **v1.1 idea, not started: per-group cross-company override for `recipient_group_ids`.** Today every group-forwarded recipient is filtered to the run's own company, unconditionally — correct for the common case, but blocks a genuine use case: a holding-company/multi-entity setup wanting one group (e.g. an executive team) to receive digests across every subsidiary company regardless of the run's company. Can't be a single global toggle, since a config might reasonably want some linked groups company-filtered and others not — would need `recipient_group_ids` to move from a plain Many2many to a proper line/join model (config + group + a per-line "ignore company boundary" flag), mirroring how `pulse.config.detector` already pairs a config with per-line settings.
 
 Pin this list to the GitHub repo as a README section. It signals discipline.

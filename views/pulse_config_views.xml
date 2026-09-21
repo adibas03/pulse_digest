@@ -36,7 +36,8 @@
                         </group>
                         <group string="Audience">
                             <field name="digest_mode" />
-                            <field name="company_recipient_ids" widget="many2many_tags" />
+                            <field name="company_recipient_ids" widget="many2many_tags"
+                                invisible="digest_mode == 'per_user'" />
                             <field name="user_group_id"
                                 invisible="digest_mode == 'company'" />
                             <field name="recipient_group_ids" widget="many2many_tags"

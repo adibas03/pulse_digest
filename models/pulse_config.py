@@ -1,5 +1,5 @@
 import pytz
-from odoo import api, models, fields, _
+from odoo import api, models, fields, Command, _
 from odoo.exceptions import ValidationError
 import logging
 from .detectors.base import Scope
@@ -95,14 +95,30 @@ class PulseConfig(models.Model):
     detector_line_ids = fields.One2many(
         "pulse.config.detector", "config_id",
         string="Detectors",
+        default=lambda self: self._default_detector_lines(),
         context={"active_test": False})
 
     # Reporting
     run_ids = fields.One2many("pulse.run", "config_id")
     last_run_date = fields.Datetime(compute="_compute_last_run", store=True)
 
-    _company_uniq = models.Constraint(
-        "UNIQUE(company_id)", "Only one Pulse config per company.")
+    _company_name_uniq = models.Constraint(
+        "UNIQUE(company_id, name)",
+        "A company can't have two Pulse configs with the same name.")
+
+    @api.model
+    def _default_detector_lines(self):
+        """One active line per catalog detector flagged is_default_enabled
+        and usable here (its dependency modules installed). A field default,
+        so the rows show on the unsaved form for the admin to prune, and any
+        caller passing detector_line_ids (even [(5, 0, 0)]) opts out.
+        The context flag lets tests keep fixture configs empty.
+        """
+        if self.env.context.get("pulse_no_default_detectors"):
+            return []
+        detectors = self.env["pulse.detector"].search(
+            [("is_default_enabled", "=", True)]).filtered("is_available")
+        return [Command.create({"detector_id": d.id}) for d in detectors]
 
     @api.constrains("digest_mode", "company_recipient_ids", "recipient_group_ids")
     def _check_company_recipients_set(self):
@@ -302,7 +318,8 @@ class PulseConfig(models.Model):
         if not run.line_ids:
             return
 
-        subject = "Pulse Digest — {}".format(
+        subject = "{} — {}".format(
+            self.name,
             run.started_at.strftime("%Y-%m-%d") if run.started_at else "")
 
         for recipient in recipients:
