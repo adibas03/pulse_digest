@@ -259,7 +259,7 @@ pulse_digest/
 │   ├── test_detectors_accounting.py  # All 3 accounting detectors, one file
 │   ├── test_detectors_sales.py       # All 3 sales/CRM detectors, one file
 │   ├── test_run_execution.py         # run_digest/run_all_audiences, cron, exception isolation
-│   ├── test_security.py              # Three-tier groups, ACL, record rules (pulse.run + .line)
+│   ├── test_security.py              # Three-tier groups, run visibility by audience, admin-only lines
 │   ├── test_suppression_gate.py
 │   ├── test_channel_dispatch.py
 │   ├── test_pulse_run_wizard.py
@@ -417,17 +417,22 @@ company-wide *and* per-user runs alike, filtered to the run's own company
 (§6/§8.3); and `_check_company_recipients_set`, a Python `@api.constrains`
 (not a `_sql_constraints`/`models.Constraint`, since it spans two
 Many2many fields with no column to `CHECK` against) guaranteeing
-company-wide mode always has at least one recipient, user or group. Also
-`is_user_recipient` — a non-stored, per-viewing-user
+company-wide mode always has at least one recipient, user or group.
+`detector_line_ids` declares `context={"active_test": False}` on the field
+definition — Odoo silently hides records of a model with an `active` field
+from an x2many unless the *field's own* context overrides it, and the
+view-level context attribute is unreliable for that (odoo/odoo#42784), so
+without it a deactivated detector line vanishes from the Detectors tab
+instead of showing unchecked. Also `is_user_recipient` — a non-stored, per-viewing-user
 (`depends_context('uid')`) Boolean gating the config form's "History"
 button: True for admins, and otherwise for a user who'd actually receive
 this config's digest, resolved per `digest_mode` (`company_recipient_ids`
 in company/both mode; `user_group_id` members in per-user/both mode;
 `recipient_group_ids` members, filtered to the config's company, in every
-mode). It looks the membership up under `sudo()` and compares ids, because
-under the viewer's own rights the lookup reads other users' companies and
-fails for a multi-company user with only one company active (caught on a
-live instance). It's a UI hint only — the run record rule is the access
+mode). The recipient-group lookup runs under `sudo()` — it's the one step
+that reads other users' `company_ids`, which fails under the viewer's own
+rights for a multi-company user with only one company active (caught on a
+live instance); the other membership sets are read as the viewer. It's a UI hint only — the run record rule is the access
 control behind it (§8.3).
 
 ### 4.3 `pulse.config.detector` — the join
@@ -596,6 +601,8 @@ This is the architectural centerpiece. A reviewer who opens the repo should see 
 
 Severity is referenced across four layers — the `pulse.run.line` model, the detectors, the views, and the tests — so it lives in one neutral module that depends on nothing and is imported by everything. This keeps the dependency graph pointing one way (a core model must never import from the detector layer) and prevents the same enum drifting out of sync across files.
 
+Source: `models/constants.py`.
+
 ```python
 # models/constants.py
 """Shared constants for pulse_digest. Single source of truth for enums
@@ -623,18 +630,23 @@ SEVERITIES = tuple(value for value, _label in SEVERITY_SELECTION)
 # Ordering helper — useful for sorting findings by urgency.
 SEVERITY_ORDER = {SEVERITY_INFO: 0, SEVERITY_WARNING: 1, SEVERITY_CRITICAL: 2}
 
-# Worst-first ordering for UI/digest display (critical shown first) — added
-# later, distinct from SEVERITY_ORDER above (ascending, for comparisons).
-# A real bug shipped from conflating the two: an early pulse_run.py import
-# aliased SEVERITY_ORDER for display purposes, silently sorting a run's
-# digest info-first instead of worst-first. Single source of truth for
-# both pulse.run._render_digest_body and pulse.run.line.severity_sequence.
+# Worst-first ordering for UI/digest display (critical shown first), distinct
+# from SEVERITY_ORDER above (ascending). Single source of truth for both
+# pulse.run._render_digest_body and pulse.run.line.severity_sequence.
 SEVERITY_DISPLAY_ORDER = {SEVERITY_CRITICAL: 0, SEVERITY_WARNING: 1, SEVERITY_INFO: 2}
 ```
+
+`SEVERITY_ORDER` (ascending, for comparisons) and `SEVERITY_DISPLAY_ORDER`
+(worst-first, for sorting what a reader sees) are deliberately separate. A
+real bug shipped from conflating them: an early `pulse_run.py` import
+aliased `SEVERITY_ORDER` for display, silently sorting a run's digest
+info-first instead of worst-first.
 
 Hoist a value into `constants.py` only when it crosses a layer boundary. Severity crosses all four, so it qualifies. Values that live in a single layer (e.g. detector `technical_name` strings, which appear only in the catalog seed and the detector class) stay where they are — moving them here would just relocate clutter.
 
 ### 5.1 Base class
+
+Source: `models/detectors/base.py`.
 
 ```python
 # models/detectors/base.py
@@ -652,7 +664,7 @@ from abc import abstractmethod
 # import path, not via base. (If base ever becomes a deliberate facade for the
 # detector API, re-exporting the severity names here would be the place to do
 # it — but it is not one today.)
-from odoo.addons.pulse_digest.models.constants import SEVERITIES
+from ..constants import SEVERITIES, SEVERITY_INFO
 
 
 class PulseDetectorBase:
@@ -677,38 +689,13 @@ class PulseDetectorBase:
 
     TECHNICAL_NAME = None
     DEFAULT_PARAMS = {}
-
-    # --- Recurrence suppression contract (v1) ---
-    # Default to NOT suppressing. The dangerous failure for a digest is hiding a
-    # finding (silent, trust-killing); the safe failure is showing it again
-    # (loud, recoverable). So an undeclared detector shows every finding every
-    # run. A detector opts INTO suppression explicitly — the surprising,
-    # withholding behaviour is never inherited silently.
-    #
-    #   SUPPRESSIBLE: can this detector's findings recur into noise?
-    #     False (default) = self-limiting (sliding window / one-off statistical
-    #     finding) -> always delivered, never suppressed.
-    #     True = persisting-condition finding (same record matches day after day
-    #     until resolved) -> eligible for suppression.
-    #
-    #   AGE_FIELD: name of the date/datetime field on the source record from
-    #     which "valid since" age is derived. None = age is not derivable from
-    #     the record. A detector that is SUPPRESSIBLE but has AGE_FIELD = None
-    #     (e.g. credit_limit_breach) is delivered every run in v1 — suppression
-    #     for it requires the per-finding state table planned for v1.1.
-    #
-    #   SHELVED THIS ITERATION: the capped age-based backoff schedule
-    #   (formerly _suppression_phase_shows, §7) that would act on AGE_FIELD is
-    #   deferred to the next version, alongside the per-recipient state table.
-    #   For now, _suppression_gate delivers every finding every run regardless
-    #   of SUPPRESSIBLE/AGE_FIELD — these two attributes exist as forward-
-    #   compatible plumbing on the contract, but nothing reads AGE_FIELD's
-    #   value yet. See §7 and §14 for current status.
     SUPPRESSIBLE = False
     AGE_FIELD = None
 
     def __init__(self, params=None):
         self.params = {**self.DEFAULT_PARAMS, **(params or {})}
+        if self.TECHNICAL_NAME is None:
+            raise ValueError('Detector subclass TECHNICAL NAME must be set')
 
     @abstractmethod
     def compute(self, env, scope):
@@ -756,8 +743,6 @@ class Scope:
     USER = "user"
     COMPANY = "company"
 
-    __slots__ = ("kind", "company", "user")
-
     def __init__(self, kind, company=None, user=None):
         if kind not in (self.USER, self.COMPANY):
             raise ValueError(f"Invalid scope kind: {kind!r}")
@@ -793,6 +778,7 @@ class Scope:
 
 class PulseFinding:
     """One finding returned by a detector. Maps 1:1 to a pulse.run.line."""
+
     def __init__(self, res_model, res_id, res_name, summary,
                  severity=SEVERITY_INFO, detail=None,
                  metric_value=None, baseline_value=None, deviation=None):
@@ -810,6 +796,22 @@ class PulseFinding:
 
 The `assert` against `SEVERITIES` means a detector that emits a typo'd severity (`"warn"` instead of `"warning"`) fails loudly rather than silently writing an invalid value the Selection field would reject later. Detectors assign severity using the named constants (`SEVERITY_CRITICAL`, etc.) imported from `constants.py`, so a typo'd _name_ is a `NameError` at import time — failing even earlier than the runtime assert. The same constants are used as the keys in a detector's `severity_thresholds` param dict and in the lookups that read it, so the key and the eventual assignment can never drift apart. Config-supplied overrides of that dict are guarded by `validate_severity_thresholds`, which uses `SEVERITIES` (the tuple) for the membership check. What detectors _do_ keep as plain strings is their own non-severity param names — keys like `"min_days_overdue"` or `"min_amount"` that are this detector's private config schema and have no coupling to the severity enum.
 
+**Suppression contract (v1).** `SUPPRESSIBLE` and `AGE_FIELD` are declared
+on the base class but nothing reads them yet — `_suppression_gate` (§7) is a
+pass-through and every finding delivers every run; they're forward-compatible
+plumbing for the v1.1 backoff (§14). The defaults are the safe ones: the
+dangerous failure for a digest is hiding a finding (silent, trust-killing),
+the safe one is showing it again (loud, recoverable), so an undeclared
+detector never suppresses and a detector must opt *in* explicitly.
+`SUPPRESSIBLE = True` means a persisting-condition finding (the same record
+matches day after day until resolved); `AGE_FIELD` names the source-record
+field its "valid since" age would come from, or `None` where none exists.
+`credit_limit_breach` is `SUPPRESSIBLE = True` with `AGE_FIELD = None` — no
+natural "since" date on a partner — so it also delivers every run until the
+per-recipient state table lands. `overdue_invoices` and `stale_opportunities`,
+which would opt in with a real `AGE_FIELD` once the backoff exists, currently
+leave both at the base defaults.
+
 ### 5.1b Shared account query helpers (`_common.py`)
 
 Both accounting detectors query `account.move` and share a base fragment:
@@ -825,8 +827,11 @@ against the real risk (Odoo changing a value). What we _do_ own and want to
 deduplicate is the _shape_ of the query, so that two detectors can't silently
 drift onto different invoice sets. That lives in a plain function module:
 
+Source: `models/detectors/account/_common.py`.
+
 ```python
-# models/detectors/account/_common.py
+# detectors/account/_common.py
+
 """Shared account.move query fragments for the accounting detectors.
 
 Deduplicates the *query shape*, not the Odoo selection strings (those stay
@@ -857,29 +862,24 @@ flat bag of string constants would not.
 
 ### 5.2 Example deterministic detector (default-enabled)
 
+Source: `models/detectors/account/overdue_invoices.py`.
+
 ```python
-# models/detectors/account/overdue_invoices.py
+# detectors/account/overdue_invoices.py
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from ...constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.account._common import (
-    customer_invoice_domain,
-)
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
+)
+from ._common import (
+    customer_invoice_domain,
 )
 
 
 class OverdueInvoicesDetector(PulseDetectorBase):
     TECHNICAL_NAME = "account.overdue_invoices"
-
-    # Persisting condition: same invoice matches every day until paid. Age
-    # would be derived from the due date once the backoff schedule ships
-    # (see §7/§14) — SUPPRESSIBLE/AGE_FIELD are left at the base defaults
-    # for this iteration since the gate doesn't act on them yet. Re-enable
-    # (SUPPRESSIBLE = True, AGE_FIELD = "invoice_date_due") when it does.
-
     DEFAULT_PARAMS = {
         "min_days_overdue": 1,
         "min_amount": 0.0,
@@ -899,7 +899,8 @@ class OverdueInvoicesDetector(PulseDetectorBase):
         ]
 
         if scope.is_user:
-            domain = self.apply_user_scope(env, domain, "account.move", scope.user)
+            domain = self.apply_user_scope(
+                env, domain, "account.move", scope.user)
 
         invoices = env["account.move"].search(domain)
 
@@ -927,19 +928,21 @@ class OverdueInvoicesDetector(PulseDetectorBase):
 
 ### 5.3 Example statistical detector (off by default)
 
+Source: `models/detectors/account/payment_delay_outlier.py`.
+
 ```python
-# models/detectors/account/payment_delay_outlier.py
+# detectors/account/payment_delay_outlier.py
 import statistics
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.account._common import (
-    customer_invoice_domain,
-)
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
+)
+from ._common import (
+    customer_invoice_domain,
 )
 
 
@@ -964,7 +967,8 @@ class PaymentDelayOutlierDetector(PulseDetectorBase):
             ("invoice_date", ">=", cutoff),
         ]
         if scope.is_user:
-            domain = self.apply_user_scope(env, domain, "account.move", scope.user)
+            domain = self.apply_user_scope(
+                env, domain, "account.move", scope.user)
 
         invoices = env["account.move"].search(domain)
 
@@ -986,7 +990,8 @@ class PaymentDelayOutlierDetector(PulseDetectorBase):
             *historical, latest = entries
             historical_delays = [d for _, d, _ in historical]
             mean = statistics.mean(historical_delays)
-            stdev = statistics.stdev(historical_delays) if len(historical_delays) > 1 else 0
+            stdev = statistics.stdev(historical_delays) if len(
+                historical_delays) > 1 else 0
             if stdev == 0:
                 continue
             latest_delay = latest[1]
@@ -1032,13 +1037,38 @@ record. The v1 suppression gate falls through to "deliver every run" for this
 case; the per-recipient `pulse.finding.state` table in v1.1 will close the gap.
 Documented at the call site so the limitation is visible, not hidden.
 
+Source: `models/detectors/account/credit_limit_breach.py`.
+
 ```python
-# models/detectors/account/credit_limit_breach.py
-from odoo.addons.pulse_digest.models.constants import (
-    SEVERITY_WARNING, SEVERITY_CRITICAL,
+"""Credit limit breach detector.
+
+Flags customers whose current outstanding AR balance (`credit` field on
+res.partner) exceeds their configured `credit_limit`. Unlike the other two
+accounting detectors, this one queries res.partner rather than account.move
+— credit limits are a partner-level concept — so it does NOT compose from
+`customer_invoice_domain`. Documented as part of the §5.3b spec.
+
+API status (verified Nov 2025 against odoo/odoo@19.0 source):
+    - `credit` (computed: current outstanding AR balance on res.partner)
+    - `credit_limit` (admin-configured threshold on res.partner)
+    The two confirmed as the correct 19.0 field names. No further verification
+    needed.
+
+Suppression behaviour: SUPPRESSIBLE = True (a partner can sit over limit day
+after day) with AGE_FIELD = None (no natural "since" date on the partner
+record). The v1 suppression gate honours that combination by delivering every
+run — see _suppression_gate in pulse_config.py. The v1.1 per-recipient
+pulse.finding.state table closes this gap.
+"""
+
+
+from ...constants import (
+    SEVERITY_WARNING,
+    SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.base import (
-    PulseDetectorBase, PulseFinding,
+from ..base import (
+    PulseDetectorBase,
+    PulseFinding,
 )
 
 
@@ -1056,7 +1086,11 @@ class CreditLimitBreachDetector(PulseDetectorBase):
     AGE_FIELD = None
 
     DEFAULT_PARAMS = {
+        # Don't flag breaches below this absolute amount (in partner currency).
+        # Useful to ignore rounding-noise breaches like 0.01 over limit.
         "min_breach_amount": 0.0,
+        # Severity is driven by HOW FAR over limit, expressed as a fraction
+        # of the limit itself. 0.10 = 10% over -> warning, 0.25 -> critical.
         "severity_thresholds": {
             # Fraction of credit_limit by which `credit` exceeds it.
             # 0.10 = 10% over -> warning; 0.25 = 25% over -> critical.
@@ -1075,8 +1109,10 @@ class CreditLimitBreachDetector(PulseDetectorBase):
         # company, not necessarily scope.company. Scope all reads explicitly.
         Partner = env["res.partner"].with_company(scope.company)
 
+        # `credit > 0` is a quick filter to skip the (typically large) set of
+        # partners with no current AR; the comparison against credit_limit
+        # happens per record below.
         domain = [
-            ("use_partner_credit_limit", "=", True),
             ("credit_limit", ">", 0),
             ("credit", ">", 0),
         ]
@@ -1142,8 +1178,9 @@ As with accounting, the shared fragment is "open opportunities for this
 company." Each detector appends its own filters. Odoo's selection values
 (`"opportunity"`) stay inline — they are CRM's vocabulary, not ours.
 
+Source: `models/detectors/sale/_common.py`.
+
 ```python
-# models/detectors/sale/_common.py
 """Shared crm.lead query fragments for the sales detectors.
 
 Deduplicates the query shape, not the Odoo selection strings. Keeping the base
@@ -1181,30 +1218,23 @@ Open opportunities with no stage movement for N days — deals rotting in the
 pipeline. The staleness signal is `date_last_stage_update` older than the
 threshold.
 
+Source: `models/detectors/sale/stale_opportunities.py`.
+
 ```python
-# models/detectors/sale/stale_opportunities.py
+# detectors/sale/stale_opportunities.py
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from ...constants import (
     SEVERITY_INFO, SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
-    open_opportunity_domain,
-)
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class StaleOpportunitiesDetector(PulseDetectorBase):
     TECHNICAL_NAME = "sale.stale_opportunities"
-
-    # Persisting condition: same deal sits stale every day until touched.
-    # Age would be derived from date_last_stage_update once the backoff
-    # schedule ships (see §7/§14) — left at base defaults for this
-    # iteration, same as overdue_invoices. Re-enable (SUPPRESSIBLE = True,
-    # AGE_FIELD = "date_last_stage_update") when it does.
-
     DEFAULT_PARAMS = {
         "stale_days": 14,
         "min_expected_revenue": 0.0,
@@ -1231,7 +1261,8 @@ class StaleOpportunitiesDetector(PulseDetectorBase):
 
         for lead in leads:
             last_move = fields.Date.to_date(lead.date_last_stage_update)
-            days = (today - last_move).days if last_move else self.params["stale_days"]
+            days = (
+                today - last_move).days if last_move else self.params["stale_days"]
 
             sev = SEVERITY_INFO
             if days >= self.params["severity_thresholds"][SEVERITY_CRITICAL]:
@@ -1256,17 +1287,17 @@ class StaleOpportunitiesDetector(PulseDetectorBase):
 Open opportunities whose expected-close date falls within the next N days
 (default: today only) — an "act now" nudge so deadlines don't slip unnoticed.
 
+Source: `models/detectors/sale/deals_closing_today.py`.
+
 ```python
-# models/detectors/sale/deals_closing_today.py
+# detectors/sale/deals_closing_today.py
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import SEVERITY_WARNING
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
-    open_opportunity_domain,
-)
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ...constants import SEVERITY_WARNING
+from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class DealsClosingTodayDetector(PulseDetectorBase):
@@ -1289,7 +1320,8 @@ class DealsClosingTodayDetector(PulseDetectorBase):
         if scope.is_user:
             domain = self.apply_user_scope(env, domain, "crm.lead", scope.user)
 
-        leads = env["crm.lead"].search(domain, order="date_deadline, expected_revenue desc")
+        leads = env["crm.lead"].search(
+            domain, order="date_deadline, expected_revenue desc")
 
         for lead in leads:
             deadline = fields.Date.to_date(lead.date_deadline)
@@ -1314,21 +1346,21 @@ baseline. "Progression" here is counted as stage advances (leads whose
 `date_last_stage_update` falls in the period), which is a cheap proxy for
 pipeline activity without needing a full stage-history log.
 
+Source: `models/detectors/sale/deal_velocity_drop.py`.
+
 ```python
-# models/detectors/sale/deal_velocity_drop.py
+# detectors/sale/deal_velocity_drop.py
 import statistics
 from collections import defaultdict
 from dateutil.relativedelta import relativedelta
 from odoo import fields
-from odoo.addons.pulse_digest.models.constants import (
+from ...constants import (
     SEVERITY_WARNING, SEVERITY_CRITICAL,
 )
-from odoo.addons.pulse_digest.models.detectors.sale._common import (
-    open_opportunity_domain,
-)
-from odoo.addons.pulse_digest.models.detectors.base import (
+from ..base import (
     PulseDetectorBase, PulseFinding,
 )
+from ._common import (open_opportunity_domain)
 
 
 class DealVelocityDropDetector(PulseDetectorBase):
@@ -1435,6 +1467,8 @@ portal page is planned, permanently).
 
 Same shape as the detector framework: registry pattern, base class, three implementations.
 
+Source: `models/pulse_channel.py`.
+
 ```python
 # models/pulse_channel.py
 
@@ -1527,8 +1561,8 @@ class WhatsAppChannel(PulseChannel):
             "res_ids": str(run.ids),
             "wa_template_id": template.id,
             # get_run_url() is the intended link — no portal page exists or
-            # is planned; recipients are internal users with backend
-            # access, so the backend URL is the design, not a stand-in.
+            # is planned (see PulseRun docstrings); recipients are internal
+            # users with backend access, so the backend URL is the design.
             "free_text_1": run.get_run_url(),
             "free_text_2": str(len(run.line_ids)),
         })
@@ -1607,23 +1641,25 @@ store should too. Revisit this decision if a 4th+ channel is ever added.
 **BUILT — real method names/structure differ from the original design below.**
 An **hourly** cron, gated per-config on `run_time`, so each company fires at
 its own configured hour without needing one cron per company. Reads config,
-executes detectors, builds the run record. Does **not** dispatch via channels
-yet (§6). What's actually in `pulse_config.py`:
+executes detectors, builds the run record, then hands it to `_dispatch_run`
+(§6). What's actually in `pulse_config.py`:
 
 ```python
-# In pulse.config — actual implementation
-import logging
+# models/pulse_config.py — imports
 import pytz
-from odoo import api, fields
-from odoo.addons.pulse_digest.models.detectors.base import Scope
+from odoo import api, models, fields, _
+from odoo.exceptions import ValidationError
+import logging
+from .detectors.base import Scope
+from .pulse_channel import CHANNELS
 
 _logger = logging.getLogger(__name__)
 
+# ... PulseConfig methods below, shown dedented; _dispatch_run is §6,
+# is_user_recipient is §4.2, the action_* methods are noted below ...
+
 
 def _same_local_hour(self, dt_a, dt_b):
-    """True if dt_a and dt_b (naive UTC datetimes) fall in the same local
-    calendar hour, in this config's own timezone. Shared by the cron gate
-    and the per-audience dedup check below so both use one comparison."""
     tz = pytz.timezone(self.timezone or "UTC")
     a = pytz.utc.localize(dt_a).astimezone(tz)
     b = pytz.utc.localize(dt_b).astimezone(tz)
@@ -1631,137 +1667,172 @@ def _same_local_hour(self, dt_a, dt_b):
 
 
 def _get_duplicate_runs(self, audience, user=None):
-    """Runs already created for this exact (config, audience, user) in the
-    current local hour. Not in the original spec — added so run_digest is
-    itself idempotent within an hour, regardless of caller (cron, a manual
-    'Run Now' click, or a future wizard)."""
     self.ensure_one()
     now_utc = fields.Datetime.now()
-    return self.run_ids.filtered(
+    duplicates = self.run_ids.filtered(
         lambda r: r.audience == audience
         and r.user_id.id == (user.id if user else False)
         and r.started_at
         and self._same_local_hour(r.started_at, now_utc)
     )
+    return duplicates
+
+
+def _suppression_gate(self, detector_cls, finding):
+    """v1 suppression: branches on SUPPRESSIBLE/AGE_FIELD, but without a
+    per-recipient state store (pulse.finding.state, v1.1) there's nothing to
+    check history against yet, so every branch still delivers. v1.1 replaces
+    the last branch with a real lookup once that store exists."""
+    if not detector_cls.SUPPRESSIBLE:
+        return True  # detector doesn't participate in suppression at all
+
+    if detector_cls.AGE_FIELD is None:
+        return True  # opted in, but no "since" signal to suppress against
+
+    # SUPPRESSIBLE and has an AGE_FIELD — this is the v1.1 seam: real
+    # suppression logic (pulse.finding.state lookup) belongs here.
+    return True
 
 
 def run_digest(self, audience, user=None, force=False):
     """Execute all active, available detectors for one audience and persist
-    the results as a pulse.run + pulse.run.line records. force=True bypasses
-    the dedup check — used by manual triggers, where a click should always
-    run, not silently no-op if the hour already fired once."""
+    the results as a pulse.run + pulse.run.line records."""
     self.ensure_one()
 
     if not force:
         duplicate_runs = self._get_duplicate_runs(audience, user)
         if duplicate_runs:
+            # already ran this hour, return the existing run
             return duplicate_runs[0]
 
     company = user.company_id if user else self.company_id
     scope = Scope.user(user) if user else Scope.company(company)
 
-    run = self.env["pulse.run"].create({
-        "config_id": self.id,
-        "audience": audience,
-        "user_id": user.id if user else False,
-    })
+    run = None
+    try:
 
-    lines = self.detector_line_ids.filtered(
-        lambda l: l.active and l.detector_id.is_available)
+        run = self.env["pulse.run"].create({
+            "config_id": self.id,
+            "audience": audience,
+            "user_id": user.id if user else False,
+        })
 
-    for line in lines:
-        detector_id = line.detector_id
-        detector_cls = detector_id._get_detector_class()  # see §4 note: lives
-                                                            # on pulse.detector,
-                                                            # not pulse.config
-        params = {**detector_id.default_params, **(line.params or {})}
-        detector = detector_cls(params=params)
-        for finding in detector.compute(self.env, scope):
-            if not self._suppression_gate(detector_cls, finding):
-                continue
-            self.env["pulse.run.line"].create({
-                "run_id": run.id,
-                "detector_id": detector_id.id,
-                "res_model": finding.res_model,
-                "res_id": finding.res_id,
-                "res_name": finding.res_name,
-                "severity": finding.severity,
-                "summary": finding.summary,
-                "detail": finding.detail,
-                "metric_value": finding.metric_value or 0.0,
-                "baseline_value": finding.baseline_value or 0.0,
-                "deviation": finding.deviation or 0.0,
-            })  # one create() per finding — see implementation note below
+        lines = self.detector_line_ids.filtered(
+            lambda l: l.active and l.detector_id.is_available)
 
-    run.write({
-        "status": "done",
-        "finished_at": fields.Datetime.now(),
-        "duration_ms": int((fields.Datetime.now() - run.started_at).total_seconds() * 1000),
-    })
+        for line in lines:
+            detector_id = line.detector_id
+            detector_cls = detector_id._get_detector_class()
+            params = {**(detector_id.default_params or {}),
+                      **(line.params or {})}
+            detector = detector_cls(params=params)
+            for finding in detector.compute(self.env, scope):
+                if not self._suppression_gate(detector_cls, finding):
+                    continue
+                self.env["pulse.run.line"].create({
+                    "run_id": run.id,
+                    "detector_id": detector_id.id,
+                    "res_model": finding.res_model,
+                    "res_id": finding.res_id,
+                    "res_name": finding.res_name,
+                    "severity": finding.severity,
+                    "summary": finding.summary,
+                    "detail": finding.detail,
+                    "metric_value": finding.metric_value or 0.0,
+                    "baseline_value": finding.baseline_value or 0.0,
+                    "deviation": finding.deviation or 0.0,
+                })
+
+        run.write({
+            "status": "done",
+            "finished_at": fields.Datetime.now(),
+            "duration_ms": int((fields.Datetime.now() - run.started_at).total_seconds() * 1000),
+        })
+    except Exception as e:
+        # run can be None here if pulse.run.create() itself is what
+        # raised (e.g. an AccessError) — nothing to mark failed in that
+        # case, just let the original exception propagate.
+        if run:
+            run.write({
+                "status": "failed",
+                "error_message": str(e),
+                "finished_at": fields.Datetime.now(),
+            })
+        raise
+
+    # recipient_group_ids applies to any run, regardless of audience —
+    # it decouples "whose records this run is scoped to" from "who
+    # receives it": a per-user run's owner still gets their own digest,
+    # but the group's current members are forwarded the same thing
+    # (e.g. a salesperson's run also reaching their team while they're
+    # out). Filtered to the run's own company (`company`, computed
+    # above) since group membership isn't company-scoped in Odoo the
+    # way company_recipient_ids's domain already restricts individual
+    # users — without this, a group spanning multiple companies could
+    # leak this run's company's data to an unrelated company's users.
+    # Both sides of every union below are always valid (possibly
+    # empty) recordsets — never None — so this is safe even when a
+    # field is empty; the save-time constraint above is what actually
+    # guarantees company-wide mode has at least one recipient.
+
+    recipient_group_users = self.recipient_group_ids.all_user_ids.filtered(
+        lambda u: company in u.company_ids)
+    if user:
+        recipients = user | recipient_group_users
+    else:
+        recipients = self.company_recipient_ids | recipient_group_users
+
+    self._dispatch_run(run, recipients)
+
     return run
 
 
 def run_all_audiences(self, force=False):
-    """Fan out one config into however many runs its digest_mode implies."""
+    """Make all runs for digest_mode."""
     self.ensure_one()
     if self.digest_mode in ("company", "both"):
         self.run_digest("company", force=force)
     if self.digest_mode in ("per_user", "both"):
-        for user in self.user_group_id.all_user_ids:  # includes members via
-                                                        # implied_ids, e.g. an
-                                                        # Administrator — see
-                                                        # §1b
+        for user in self.user_group_id.all_user_ids:
             self.run_digest("user", user=user, force=force)
 
 
 def _cron_is_due(self, now_utc):
-    """True if now_utc falls in this config's scheduled hour, in its own
+    """True if `now_utc` falls in this config's scheduled hour, in its own
     timezone, AND no run has already fired during that same local hour.
-    Cron runs hourly, so this can only resolve to hour granularity — a
-    run_time of 7.5 (7:30) is treated as due during the 7:00-7:59 hour, same
-    as 7.0. Documented limitation, not a bug."""
+    Cron runs hourly, so we can only resolve to hour granularity — a
+    run_time of 7.5 (7:30) is treated as "due during the 7:00-7:59 hour,"
+    same as 7.0. Documented limitation, not a bug."""
     self.ensure_one()
     tz = pytz.timezone(self.timezone or "UTC")
     local_now = pytz.utc.localize(now_utc).astimezone(tz)
     if local_now.hour != int(self.run_time):
         return False
-    if self.last_run_date and self._same_local_hour(self.last_run_date, now_utc):
-        return False  # already ran this hour
+
+    if self.last_run_date:
+        if self._same_local_hour(self.last_run_date, now_utc):
+            return False  # already ran this hour
     return True
 
 
 def _cron_run_digests(self):
     """Entry point for cron_pulse_run_digests (data/pulse_cron_data.xml).
     One hourly cron serves every company: each active config decides for
-    itself whether it's due."""
+    itself whether it's due, based on its own run_time/timezone."""
     now_utc = fields.Datetime.now()
     for config in self.search([("active", "=", True)]):
         if config._cron_is_due(now_utc):
-            config.run_all_audiences()
+            try:
+                config.run_all_audiences()
+            except Exception:
+                _logger.exception(
+                    "Pulse run failed for config %s", config.id)
+```
 
+The reference design for the shelved backoff schedule, kept commented out
+for when it lands (see §14) — not part of the built code:
 
-def _suppression_gate(self, detector_cls, finding, today):
-    """Decide whether a finding is delivered this run. Returns (bool, reason).
-
-    SHELVED THIS ITERATION (see §14): the capped age-based backoff schedule
-    originally specified here (see the commented-out _suppression_phase_shows
-    below) is deferred to the next version, alongside per-recipient
-    suppression state. For now this gate is intentionally a pass-through —
-    every branch delivers, because there is no backoff logic behind it yet.
-    SUPPRESSIBLE/AGE_FIELD remain on the contract (§5.1) as forward-compatible
-    plumbing; nothing currently reads AGE_FIELD's value.
-    """
-    if not detector_cls.SUPPRESSIBLE:
-        return True, None                # self-limiting -> always deliver
-    if detector_cls.AGE_FIELD is None:
-        return True, None                # suppressible but no derivable age
-                                          # (credit_limit_breach) -> always
-                                          # deliver
-    return True, None                    # SUPPRESSIBLE + has an AGE_FIELD:
-                                          # backoff not implemented this
-                                          # iteration -> still always deliver
-
-
+```python
 # DEFERRED TO NEXT VERSION — not implemented this iteration (see §14).
 # Kept here, commented out, as the reference design for when it lands.
 #
@@ -1789,8 +1860,6 @@ def _suppression_gate(self, detector_cls, finding, today):
 #     if age_days <= 6:
 #         return age_days % 2 == 0
 #     return age_days % 7 == 0
-
-
 ```
 
 The cron is registered in `data/pulse_cron_data.xml` running **hourly** (no
@@ -2042,7 +2111,7 @@ companies.
 
 ## 9. Test plan
 
-**BUILT.** `tests/` exists with 12 files (plus `common.py` for shared fixtures), 179 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
+**BUILT.** `tests/` exists with 11 test files (plus `common.py` for shared fixtures), 179 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
 
 Tests live in `tests/`.
 
@@ -2170,8 +2239,8 @@ These are deliberate non-goals for v1 so they don't creep:
 
 **Additional items shelved this iteration, not in the original roadmap:**
 
-- **Channel dispatch (email/in-app/WhatsApp delivery) — still intended, not ready yet.** The channel classes exist (§6) but nothing calls them; `run_digest` computes and persists findings, then stops. Also blocked on: `data/mail_template_data.xml` not in the manifest, `pulse.run` not inheriting `mail.thread` (breaks `InAppChannel`), `WhatsAppChannel` still on the pre-correction API, and `res.users` channel-preference fields (§4.5) not built. Immediate next-next task after exception isolation below.
-- **Full cron/execution robustness (exception isolation) — still intended, not ready yet, immediate next task.** The cron mechanics themselves are built and working (§7: `_cron_run_digests`/`_cron_is_due`/`run_digest`/`run_all_audiences`), but the per-run and per-config try/except (§7's implementation notes) that make the pipeline production-safe were never added. One bad detector currently aborts its whole run permanently and can take down every other company's run in the same cron tick.
+- **Channel dispatch (email/in-app/WhatsApp delivery) — built.** `run_digest` hands each finished run to `_dispatch_run` (§6), which renders and sends per recipient through the registered channels, gated by both the config-level and the per-user toggles. Everything this bullet originally listed as blocking it is done: the mail template is in the manifest, `pulse.run` inherits `mail.thread`, `WhatsAppChannel` uses the corrected composer API, and the `res.users` preference fields (§4.5) exist. WhatsApp still needs a deployment-side, Meta-approved template before anything is sent (§6).
+- **Cron/execution robustness (exception isolation) — built.** `run_digest` marks a run `failed` (and re-raises) if a detector raises, and `_cron_run_digests` isolates each config in its own try/except so one company's failure can't abort another's in the same tick — see §7's implementation notes.
 - **Portal page — permanently out of scope, not deferred.** The file tree's `controllers/portal.py` (`/my/pulse/<run_id>`) and `views/pulse_portal_templates.xml` will not be built. Every Pulse recipient is an internal Odoo user with backend access (`group_pulse_recipient`/`group_pulse_admin` are implied by `base.group_user`) — there's no external/customer audience for this module, so the portal infrastructure (built for users *without* backend accounts, and requiring the `portal` module dependency this manifest deliberately doesn't declare) doesn't match the actual need. The polished backend `pulse.run` list/form view (§7) plus `get_run_url()` pointing at it is the intended design, not a stand-in.
 - **Manual per-user trigger wizard — built.** `wizards/pulse_run_wizard.py` + `wizards/pulse_run_wizard_views.xml` expose `pulse.config.action_admin_run_now`'s existing per-user targeting (previously only reachable at the model layer) via a "Run For User..." header button on `pulse.config`'s form, admin-only. The wizard restricts `user_id` to the config's own `user_group_id` membership so an admin can't accidentally trigger a run for someone the config never intended to include — originally enforced only client-side by the view's domain, `action_run` now re-validates `user_id` against `allowed_user_ids` itself and raises `UserError` if it's outside the group, so the restriction holds even against direct ORM/RPC calls that bypass the wizard form.
 - **`pulse.run.line` access re-check on render — built; `pulse.run.line` access itself — now admin-only.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete. The per-user record rule this bullet used to list for `pulse.run.line` was later removed along with its Recipient ACL row, once run access was opened to the audience (next bullet) and exposing raw lines to that audience would have reopened the same leak in the backend.
