@@ -417,7 +417,18 @@ company-wide *and* per-user runs alike, filtered to the run's own company
 (§6/§8.3); and `_check_company_recipients_set`, a Python `@api.constrains`
 (not a `_sql_constraints`/`models.Constraint`, since it spans two
 Many2many fields with no column to `CHECK` against) guaranteeing
-company-wide mode always has at least one recipient, user or group.
+company-wide mode always has at least one recipient, user or group. Also
+`is_user_recipient` — a non-stored, per-viewing-user
+(`depends_context('uid')`) Boolean gating the config form's "History"
+button: True for admins, and otherwise for a user who'd actually receive
+this config's digest, resolved per `digest_mode` (`company_recipient_ids`
+in company/both mode; `user_group_id` members in per-user/both mode;
+`recipient_group_ids` members, filtered to the config's company, in every
+mode). It looks the membership up under `sudo()` and compares ids, because
+under the viewer's own rights the lookup reads other users' companies and
+fails for a multi-company user with only one company active (caught on a
+live instance). It's a UI hint only — the run record rule is the access
+control behind it (§8.3).
 
 ### 4.3 `pulse.config.detector` — the join
 
@@ -546,8 +557,11 @@ suppression gate is a pass-through (§13/§14):
   actual `mail.mail` records — §6's dispatch note on why per-recipient
   delivery detail lives there rather than a purpose-built model);
   `_filter_lines_readable_by`/`_render_digest_body` (the render-time
-  access re-check, §8.3); `get_run_url()` (replaces the never-built
-  `get_portal_url()` referenced in earlier drafts of this spec).
+  access re-check, §8.3); `digest_html` (non-stored, per-user computed
+  `Html` — what non-admins see in place of the admin-only raw findings
+  list, filtered exactly like the delivered digest, §8.3); `get_run_url()`
+  (replaces the never-built `get_portal_url()` referenced in earlier
+  drafts of this spec).
 - `pulse.run.line` has `severity_sequence` — a stored computed sort key
   (worst-first: critical=0, warning=1, info=2), since a list view can't
   order by an arbitrary Python dict the way `_render_digest_body`'s
@@ -1830,16 +1844,20 @@ history. What's actually built:
 ### 8.1 Groups (`security/pulse_security.xml`) — actual: three tiers, each implying the one below
 
 - `group_pulse_viewer` — read-only visibility into `pulse.config` and the
-  `pulse.detector` catalog. **Implied by `base.group_user`** (Odoo's
-  "Internal User" group), so it's granted automatically to every employee —
-  not something an admin assigns individually. Answers "what is Pulse
-  configured to do," not "do I receive anything."
-- `group_pulse_recipient` — implies `group_pulse_viewer`. Receives per-user
-  digests. Sees own run history and findings (`pulse.run`/`pulse.run.line`),
-  scoped by record rule.
+  `pulse.detector` catalog, and — through `pulse_run_user_rule` (§8.3) — into
+  the runs the user is actually a recipient of. **Implied by
+  `base.group_user`** (Odoo's "Internal User" group), so it's granted
+  automatically to every employee — not something an admin assigns
+  individually. Answers "what is Pulse configured to do, and what was I
+  sent," not "am I a Pulse power user."
+- `group_pulse_recipient` — implies `group_pulse_viewer`. Note what this tier
+  no longer does: it does **not** gate run access any more (that follows the
+  audience, not the tier — §8.3). It's the default `user_group_id` for
+  per-user mode and the natural grouping for people an admin wants in the
+  per-user audience, nothing more.
 - `group_pulse_admin` — implies `group_pulse_recipient` (and transitively
   `group_pulse_viewer`). Configures detectors, recipient lists, schedule.
-  Sees all runs.
+  Sees all runs and the raw findings (`pulse.run.line`).
 
 All three share one `res.groups.privilege` (`pulse_privilege`, under a new
 `module_category_pulse` category) so they render together as a group under
@@ -1849,32 +1867,113 @@ of `privilege_id` pointing at this new model (§1b).
 
 ### 8.2 ACL (`security/ir.model.access.csv`) — actual
 
-| Model                   | Viewer (read) | Recipient (read)       | Admin (read/write/create/delete) |
-| ----------------------- | -------------- | ---------------------- | --------------------------------- |
-| `pulse.detector`        | ✓ read         | (inherits Viewer)      | ✓ all                              |
-| `pulse.config`          | ✓ read         | (inherits Viewer)      | ✓ all                              |
-| `pulse.config.detector` | ✓ read         | (inherits Viewer)      | ✓ all                              |
-| `pulse.run`             | –              | own only (record rule) | ✓ all                              |
-| `pulse.run.line`        | –              | own run's lines only (record rule) | ✓ all                  |
-| `pulse.run.wizard`      | –              | –                       | ✓ all                              |
+| Model                   | Viewer                                 | Recipient          | Admin (read/write/create/delete) |
+| ----------------------- | -------------------------------------- | ------------------ | --------------------------------- |
+| `pulse.detector`        | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
+| `pulse.config`          | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
+| `pulse.config.detector` | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
+| `pulse.run`             | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
+| `pulse.run.line`        | –                                      | –                  | ✓ all                              |
+| `pulse.run.wizard`      | –                                      | –                  | ✓ all                              |
 
-Actual content-visibility (run results, findings) stays gated at the
-Recipient tier, unchanged from the original design — only the
-config/catalog visibility moved down to the universal Viewer tier.
+ACL says which models a group may touch at all; the record rule (§8.3)
+says which rows. `pulse.run` moved down to the Viewer tier because a
+recipient's tier is an accident of how an admin set up groups, while being
+dispatched a digest is the real fact — and someone dispatched a digest must
+be able to open the run it links to. `pulse.run.line` is deliberately the
+opposite: admin-only, with non-admins reading findings through
+`pulse.run.digest_html` instead (§8.3).
 
-### 8.3 Record rules — both gaps resolved
+### 8.3 Record rules — run access follows the audience; lines are admin-only
 
-**`pulse.run.line`'s own record rule — BUILT.** It now has record rules
-(`pulse_run_line_user_rule`, `pulse_run_line_admin_rule`,
-`pulse_run_line_company_rule` in `security/pulse_security.xml`), mirroring
-`pulse_run_user_rule` by traversing `run_id.user_id`/`run_id.audience` — a
-Recipient can only read lines belonging to a run they're allowed to see,
-not just "harmless in practice because the only UI path is nested." Admin
-visibility is unaffected: `group_pulse_admin` implies `group_pulse_
-recipient`, and Odoo ORs per-group record rules together, so `(own runs
-only) OR (everything)` still resolves to everything for admins — the same
-mechanism already proven for `pulse.run` itself. This is purely a backend-
-viewing (who can open a run) control, independent of the point below.
+**`pulse.run` — `pulse_run_user_rule`, attached at the Viewer tier.** A run
+is visible to the people it is actually for, evaluated live against the
+config:
+
+```xml
+<record id="pulse_run_user_rule" model="ir.rule">
+    <field name="name">Pulse Run: runs I am a recipient of</field>
+    <field name="model_id" ref="model_pulse_run"/>
+    <field name="domain_force">['|', '|',
+        '&amp;', ('audience', '=', 'user'), ('user_id', '=', user.id),
+        '&amp;', ('audience', '=', 'company'), ('config_id.company_recipient_ids', 'in', [user.id]),
+        ('config_id.recipient_group_ids.all_user_ids', 'in', [user.id])]</field>
+    <field name="groups" eval="[(4, ref('group_pulse_viewer'))]"/>
+    <field name="perm_read" eval="True"/>  <!-- write/create/unlink: False -->
+</record>
+```
+
+- a per-user run is visible to its own owner;
+- a company-wide run to the config's `company_recipient_ids`;
+- any run (either audience) to members of the config's `recipient_group_ids`,
+  matching how dispatch forwards to them.
+
+Three decisions worth recording:
+
+1. **Attached at Viewer, not Recipient — and this is not optional.** Odoo
+   only restricts rows through rules that apply to the user's groups. If
+   `pulse.run` were readable at the Viewer tier with the rule attached
+   anywhere else, a plain internal user would have ACL read and *no*
+   applicable non-global rule — leaving only the company rule, so they'd see
+   every run in their company. A record rule can narrow rows for someone who
+   already passes the ACL; it can never grant model access to someone who
+   doesn't, which is why the ACL and the rule had to move together.
+2. **Live, not a per-run snapshot.** Snapshotting the resolved recipients
+   onto each run (a stored Many2many) would make the rule a one-term
+   `in` check and exact to who was actually sent that run, but it rejects
+   the semantics `recipient_group_ids` already has everywhere else — "add
+   someone to the group and it follows, no config edit needed" — since a
+   member added later couldn't open earlier runs; and it stores
+   runs × recipients rows for a purely access-control purpose. The live
+   rule reads the config as it is now, and can't drift from it.
+3. **The company boundary is the global company rule's job, not this
+   rule's.** `pulse_run_company_rule` (`global=True`) is ANDed with
+   everything, so a group member from another company is excluded without
+   this rule knowing anything about companies. Caveat inherited from Odoo:
+   `company_ids` in a rule means the user's *currently active* companies,
+   not every company they're assigned to — a recipient with the run's
+   company assigned but not selected in the switcher won't see it.
+
+**How it lines up with the History button.** `pulse.config.is_user_recipient`
+(§4.2) gates the button on the config form; this rule is the enforcement
+behind it — the button is a UI hint, never the access control. They agree on
+who counts (admins; `company_recipient_ids`; `user_group_id` members, who
+only ever get their own run; `recipient_group_ids` members). They differ at
+the edges, accepted: the button is per-config and follows `digest_mode`,
+the rule is per-run and follows `audience`, so switching a config from
+`both` to `per_user` can leave old company runs openable while the button
+hides; and the button filters group members to `config.company_id` where the
+rule leans on the company rule. Before this change the button ran ahead of
+access — a Viewer-only recipient saw History and got an AccessError on
+click.
+
+**`pulse.run.line` — admin-only, no per-user rule.** Only `group_pulse_admin`
+has an ACL row (the earlier `pulse_run_line_user_rule` and Recipient row were
+removed), and `pulse_run_line_admin_rule` / `pulse_run_line_company_rule`
+remain. The reason is the same leak §8.3's render-time re-check closes for
+delivery, reappearing in the backend: opening a company-wide run to its
+recipients and then letting them read its lines would show `res_name`/
+`summary` for records they can't otherwise open (a colleague's deal under
+CRM's "Own Documents Only"), and a record rule can't express a per-record
+check against a dynamic `res_model`/`res_id`. An earlier note here claimed
+the global company rule already covered backend viewing — that was wrong; it
+covers the *company* boundary only, not record-level access.
+
+Non-admins instead read findings through **`pulse.run.digest_html`**: a
+non-stored, per-user (`depends_context('uid')`) `Html` field that reads the
+lines via `sudo()` but decides visibility against the real viewer
+(`_filter_lines_readable_by`) and renders with `_render_digest_body` — the
+same filter and hidden-count notice as the delivered digest, so what a
+recipient sees in-app matches what they were sent. The run form shows it to
+non-admins (`groups="!…group_pulse_admin"`) and the raw `line_ids` list to
+admins only.
+
+Accepted disclosures: the run's stored counts (`line_count`, per-severity
+counts) and `worst_severity` badge cover the whole run, including findings
+the viewer can't see — quantity and severity, never content, the same level
+as the hidden-count notice. Chatter on the run is not gated (a deliberate
+call); if message visibility follows run access, in-app digests posted on a
+run are readable by anyone who can open it — revisit if that matters.
 
 **Render-time re-check — BUILT, after a reversal worth recording
 honestly.** This went through three states, not two, and the middle one
@@ -1912,56 +2011,38 @@ evaluated as that recipient) rather than one check per line, since a
 company-wide run can have many recipients. A recipient whose entire
 visible set ends up empty still gets dispatched to — `_render_digest_body`
 discloses a hidden count rather than the run silently skipping them (§6).
-
-Original risk this section is about: a `pulse.run.line` references
-arbitrary `res_model` + `res_id`. The record rule (above) closes the
-backend-viewing half — who can open a run at all. `_filter_lines_
-readable_by` closes the render-time half — whether a legitimately-visible
-line can still name a record the specific recipient can't independently
-open. Both are needed; neither substitutes for the other.
+The same filter now backs `digest_html` (above), so the delivered digest
+and the in-app view can't disagree about what a recipient may see.
 
 **A parallel gap in `pulse.config.detector` — found, deliberately left
-open, low priority.** Same shape as the `pulse.run.line` gap above (ACL
-grants Viewer read=1 with no row-scoping, so a plain internal user in a
-multi-company instance can `search()` `pulse.config.detector` directly and
-see every company's linked detectors, active state, and `params`
-overrides — not just their own company's, the way `pulse.config` itself is
-scoped via `pulse_config_company_rule`). Left unfixed, unlike the
-`pulse.run.line` case, because what it actually exposes is different in
-kind, not just degree: `params` holds detector *tuning* (e.g.
-`min_days_overdue`, `severity_thresholds: {"warning": 30, "critical": 60}`)
-— policy/configuration choices, not business content like a customer name,
-an amount owed, or a specific finding. Revisit if a future detector's
+open, low priority.** Same shape as the `pulse.run.line` gap this section
+used to describe (ACL grants Viewer read=1 with no row-scoping, so a plain
+internal user in a multi-company instance can `search()`
+`pulse.config.detector` directly and see every company's linked detectors,
+active state, and `params` overrides — not just their own company's, the way
+`pulse.config` itself is scoped via `pulse_config_company_rule`). Left
+unfixed, unlike the `pulse.run.line` case, because what it actually exposes
+is different in kind, not just degree: `params` holds detector *tuning*
+(e.g. `min_days_overdue`, `severity_thresholds: {"warning": 30, "critical":
+60}`) — policy/configuration choices, not business content like a customer
+name, an amount owed, or a specific finding. Revisit if a future detector's
 params ever end up holding something genuinely sensitive, or if real
 multi-company usage shows this mattering in practice.
 
-Record rule on `pulse.run` (built as designed):
-
-```xml
-<record id="pulse_run_user_rule" model="ir.rule">
-    <field name="name">Pulse Run: own runs only</field>
-    <field name="model_id" ref="model_pulse_run"/>
-    <field name="domain_force">
-        [('user_id', '=', user.id), ('audience', '=', 'user')]
-    </field>
-    <field name="groups" eval="[(4, ref('group_pulse_recipient'))]"/>
-</record>
-```
-
-Two additional record rules were built beyond this section's original scope:
-an explicit `pulse_run_admin_rule` (`domain_force = [(1, '=', 1)]` for
-`group_pulse_admin`) so the admin-sees-everything behavior is legible in the
-rule matrix rather than implicit, and two `global=True` multi-company rules
-(`pulse_run_company_rule`, `pulse_config_company_rule`) restricting both
-models to companies the current user has `allowed_company_ids` access to —
-the standard Odoo multi-company pattern, applied uniformly regardless of
-Pulse group.
+Other rules, unchanged: an explicit `pulse_run_admin_rule`
+(`domain_force = [(1, '=', 1)]` for `group_pulse_admin`) so the
+admin-sees-everything behavior is legible in the rule matrix rather than
+implicit — record rules OR across a user's groups, so it also stops the
+Viewer-tier rule above from constraining admins — and the `global=True`
+multi-company rules (`pulse_run_company_rule`, `pulse_run_line_company_rule`,
+`pulse_config_company_rule`) restricting each model to the user's active
+companies.
 
 ---
 
 ## 9. Test plan
 
-**BUILT.** `tests/` exists with 12 files (plus `common.py` for shared fixtures), 155 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
+**BUILT.** `tests/` exists with 12 files (plus `common.py` for shared fixtures), 179 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
 
 Tests live in `tests/`.
 
@@ -1973,13 +2054,13 @@ Tests live in `tests/`.
 | `test_detectors_accounting.py`  | The three accounting detectors (`overdue_invoices`, `payment_delay_outlier`, `credit_limit_breach`): severity buckets against `SEVERITY_*` constants, statistical baseline/z-score behavior, `with_company` correctness across companies, the no-salesperson exclusion from per-user runs, user-scope filtering                                                |
 | `test_detectors_sales.py`       | The three sales/CRM detectors (`stale_opportunities`, `deals_closing_today`, `deal_velocity_drop`): same shape of coverage as the accounting file, scoped to `crm.lead`                                                                                                                                                                                          |
 | `test_run_execution.py`         | `run_digest`/`run_all_audiences`, per-hour dedup (including per-user scoping and the `force` bypass), `_cron_is_due`/`_cron_run_digests` gating, and exception isolation — a failing detector marks its run failed without killing the process, and one config's failure doesn't block another company's cron tick                                             |
-| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); ACL and the "own per-user runs only" record rule enforced per tier on both `pulse.run` *and* `pulse.run.line` (a recipient can't read another run's lines directly via search, not just through the nested form view); non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both                                 |
+| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); run visibility follows the audience, not the tier (`TestRunVisibility`, using a plain internal user: own per-user run, listed company recipient, recipient-group member, live add/remove of group and company recipients, another company's group member blocked by the company rule, read-only); `pulse.run.line` is admin-only — every non-admin path, including the recipient of the run reading its own lines, raises `AccessError`; non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both                                 |
 | `test_suppression_gate.py`      | **Scope reduced this iteration** (backoff schedule shelved — see §14): self-limiting detectors (`SUPPRESSIBLE = False`) always deliver; `SUPPRESSIBLE = True` + `AGE_FIELD = None` always delivers (the credit_limit_breach case) — the gate is a pass-through for every v1 combination. Deferred to the version that ships the backoff: phase-schedule correctness, the 7-day cap, missing/null anchor defaulting to deliver, and `suppression_reason` population. |
 | `test_channel_dispatch.py`      | `_dispatch_run`'s config-level × user-level channel gate; `email_sent`/`inapp_sent`/`whatsapp_sent` verified against the real `mail.mail` queue and `run.message_ids`, not just the flags; WhatsApp's no-op when the `whatsapp` module isn't installed; per-channel and per-recipient failure isolation via a fake channel patched into the registry; the render-time re-check's dispatch-level integration — a recipient with a fully-restricted finding still gets dispatched to (no silent skip) and the delivered message discloses the hidden count without leaking the restricted content |
 | `test_pulse_run_wizard.py`      | `allowed_user_ids` reflects the config's `user_group_id`; `action_run` raises on a missing `user_id` for per-user audience, raises if `user_id` is set but outside `allowed_user_ids` (server-side re-validation added — no longer just a client-side view domain), and delegates correctly to `action_admin_run_now` for both audiences                                                                    |
 | `test_pulse_run_fields.py`      | `pulse.run`'s severity-stat computed fields (`critical_count`/`warning_count`/`info_count`/`worst_severity`) and `pulse.run.line.severity_sequence`, including worst-first ordering via `search(..., order="severity_sequence")`                                                                                                                                |
-| `test_recipient_resolution.py`  | Who ends up as `run_digest`'s `recipients` — the `company_recipient_ids`/`recipient_group_ids` union for company-wide *and* per-user runs (the "decouple run from recipient" forwarding case), the multi-company membership filter (including a group with zero same-company members), live/dynamic group-membership resolution, and all three states of the `_check_company_recipients_set` constraint |
-| `test_digest_access_filtering.py` | Unit-level coverage of the render-time re-check (§8.3): `_filter_lines_readable_by` (readable/unreadable/admin-override/stale-`res_model`/multi-model batching, using `pulse.run`'s own record rule as a reliable restricted target rather than depending on another app's default ACL setup) and `_render_digest_body`'s hidden-count disclosure (no notice, partial-hidden, all-hidden, truly-empty-run, and that omitting `lines` raises `TypeError` rather than silently rendering everything) |
+| `test_recipient_resolution.py`  | Who ends up as `run_digest`'s `recipients` — the `company_recipient_ids`/`recipient_group_ids` union for company-wide *and* per-user runs (the "decouple run from recipient" forwarding case), the multi-company membership filter (including a group with zero same-company members), live/dynamic group-membership resolution, and all three states of the `_check_company_recipients_set` constraint; plus `TestIsUserRecipient` for the History-button gate — admin, per-`digest_mode` membership of `company_recipient_ids`/`user_group_id`/`recipient_group_ids`, another company's group member excluded, and the value following the viewing user on the same record (the per-uid cache) |
+| `test_digest_access_filtering.py` | Unit-level coverage of the render-time re-check (§8.3): `_filter_lines_readable_by` (readable/unreadable/admin-override/stale-`res_model`/multi-model batching, using `pulse.run`'s own record rule as a reliable restricted target rather than depending on another app's default ACL setup) and `_render_digest_body`'s hidden-count disclosure (no notice, partial-hidden, all-hidden, truly-empty-run, and that omitting `lines` raises `TypeError` rather than silently rendering everything); plus `TestDigestHtml` — a user with no line ACL still reads their own digest, a restricted finding is hidden and disclosed, admin sees everything, and the same record renders differently per viewing user |
 
 ### 9.2 Tour test
 
@@ -2093,8 +2174,9 @@ These are deliberate non-goals for v1 so they don't creep:
 - **Full cron/execution robustness (exception isolation) — still intended, not ready yet, immediate next task.** The cron mechanics themselves are built and working (§7: `_cron_run_digests`/`_cron_is_due`/`run_digest`/`run_all_audiences`), but the per-run and per-config try/except (§7's implementation notes) that make the pipeline production-safe were never added. One bad detector currently aborts its whole run permanently and can take down every other company's run in the same cron tick.
 - **Portal page — permanently out of scope, not deferred.** The file tree's `controllers/portal.py` (`/my/pulse/<run_id>`) and `views/pulse_portal_templates.xml` will not be built. Every Pulse recipient is an internal Odoo user with backend access (`group_pulse_recipient`/`group_pulse_admin` are implied by `base.group_user`) — there's no external/customer audience for this module, so the portal infrastructure (built for users *without* backend accounts, and requiring the `portal` module dependency this manifest deliberately doesn't declare) doesn't match the actual need. The polished backend `pulse.run` list/form view (§7) plus `get_run_url()` pointing at it is the intended design, not a stand-in.
 - **Manual per-user trigger wizard — built.** `wizards/pulse_run_wizard.py` + `wizards/pulse_run_wizard_views.xml` expose `pulse.config.action_admin_run_now`'s existing per-user targeting (previously only reachable at the model layer) via a "Run For User..." header button on `pulse.config`'s form, admin-only. The wizard restricts `user_id` to the config's own `user_group_id` membership so an admin can't accidentally trigger a run for someone the config never intended to include — originally enforced only client-side by the view's domain, `action_run` now re-validates `user_id` against `allowed_user_ids` itself and raises `UserError` if it's outside the group, so the restriction holds even against direct ORM/RPC calls that bypass the wizard form.
-- **`pulse.run.line` access re-check on render, and its own record rule — both built.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete.
+- **`pulse.run.line` access re-check on render — built; `pulse.run.line` access itself — now admin-only.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete. The per-user record rule this bullet used to list for `pulse.run.line` was later removed along with its Recipient ACL row, once run access was opened to the audience (next bullet) and exposing raw lines to that audience would have reopened the same leak in the backend.
 - **Group-based recipients (`recipient_group_ids`) — built.** `pulse.config.recipient_group_ids` (Many2many `res.groups`) decouples "whose records a run is scoped to" from "who receives it": every member of a linked group who belongs to the run's own company is unioned into that run's recipients, for company-wide *and* per-user runs alike — resolved live at dispatch time, no config edit needed when group membership changes. `company_recipient_ids` (individual users) stays company-wide-specific and unchanged; `recipient_group_ids` is audience-agnostic. Group membership deciding *who receives* a digest is still the deliberate access decision (same trust tier as `company_recipient_ids`) — but that's a separate question from whether digest *content* can exceed what a specific recipient could otherwise read, which is what `_filter_lines_readable_by`'s render-time re-check (§6/§8.3) actually closes. See `pulse.config._check_company_recipients_set` for the save-time guarantee that company-wide mode always has at least one recipient (user or group).
+- **Run access follows the audience — built.** A dispatched recipient can now open the run their digest links to, regardless of Pulse tier: `pulse.run` is readable at the Viewer tier, with `pulse_run_user_rule` (attached at Viewer) limiting rows to own per-user runs, company-wide runs for listed `company_recipient_ids`, and any run for `recipient_group_ids` members — live against the config, deliberately not a per-run snapshot. Non-admins read findings through the per-user, access-filtered `pulse.run.digest_html`; raw `pulse.run.line` stays admin-only. The config form's History button (`pulse.config.is_user_recipient`) is the UI gate over the same audience. Known and accepted: chatter on the run isn't gated, and the run's stored counts/worst-severity cover findings the viewer can't see (§8.3).
 - **v1.1 idea, not started: per-group cross-company override for `recipient_group_ids`.** Today every group-forwarded recipient is filtered to the run's own company, unconditionally — correct for the common case, but blocks a genuine use case: a holding-company/multi-entity setup wanting one group (e.g. an executive team) to receive digests across every subsidiary company regardless of the run's company. Can't be a single global toggle, since a config might reasonably want some linked groups company-filtered and others not — would need `recipient_group_ids` to move from a plain Many2many to a proper line/join model (config + group + a per-line "ignore company boundary" flag), mirroring how `pulse.config.detector` already pairs a config with per-line settings.
 
 Pin this list to the GitHub repo as a README section. It signals discipline.
