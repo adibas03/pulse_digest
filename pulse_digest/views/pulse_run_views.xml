@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="view_pulse_run_list" model="ir.ui.view">
+            <field name="name">pulse.run.list</field>
+            <field name="model">pulse.run</field>
+            <field name="arch" type="xml">
+                <list decoration-danger="status == 'failed' or worst_severity == 'critical'"
+                    decoration-warning="status != 'failed' and worst_severity == 'warning'"
+                    decoration-muted="status != 'failed' and not worst_severity">
+                    <field name="config_id" />
+                    <field name="audience" />
+                    <field name="user_id" />
+                    <field name="started_at" />
+                    <field name="status" widget="badge"
+                        decoration-success="status == 'done'"
+                        decoration-danger="status == 'failed'"
+                        decoration-info="status == 'running'" />
+                    <field name="worst_severity" widget="badge"
+                        decoration-danger="worst_severity == 'critical'"
+                        decoration-warning="worst_severity == 'warning'"
+                        decoration-info="worst_severity == 'info'" />
+                    <field name="line_count" />
+                    <field name="critical_count" optional="hide" />
+                    <field name="warning_count" optional="hide" />
+                    <field name="info_count" optional="hide" />
+                </list>
+            </field>
+        </record>
+
+        <record id="view_pulse_run_form" model="ir.ui.view">
+            <field name="name">pulse.run.form</field>
+            <field name="model">pulse.run</field>
+            <field name="arch" type="xml">
+                <form string="Pulse Run">
+                    <sheet>
+                        <div class="oe_button_box" name="button_box">
+                            <button name="action_view_sent_mails" type="object"
+                                class="oe_stat_button" icon="fa-envelope-o"
+                                groups="pulse_digest.group_pulse_admin">
+                                <field name="mail_count" widget="statinfo" string="Sent Emails" />
+                            </button>
+                        </div>
+                        <widget name="web_ribbon" title="Failed" bg_color="text-bg-danger"
+                            invisible="status != 'failed'" />
+                        <div class="alert alert-danger" role="alert" invisible="status != 'failed'">
+                            <strong>This run failed:</strong>
+                            <field name="error_message" readonly="1" nolabel="1" />
+                        </div>
+                        <div class="oe_title">
+                            <h1>
+                                <field name="worst_severity" widget="badge"
+                                    decoration-danger="worst_severity == 'critical'"
+                                    decoration-warning="worst_severity == 'warning'"
+                                    decoration-info="worst_severity == 'info'"
+                                    invisible="not worst_severity" />
+                                <span invisible="worst_severity">No findings</span>
+                            </h1>
+                        </div>
+                        <group>
+                            <group>
+                                <field name="config_id" />
+                                <field name="audience" />
+                                <field name="user_id" invisible="audience != 'user'" />
+                                <field name="status" widget="badge"
+                                    decoration-success="status == 'done'"
+                                    decoration-danger="status == 'failed'"
+                                    decoration-info="status == 'running'" />
+                            </group>
+                            <group>
+                                <field name="started_at" />
+                                <field name="finished_at" />
+                                <field name="duration_ms" />
+                            </group>
+                        </group>
+                        <group string="Findings summary" invisible="status != 'done'">
+                            <field name="line_count" />
+                            <field name="critical_count" />
+                            <field name="warning_count" />
+                            <field name="info_count" />
+                        </group>
+                        <group string="Delivery" invisible="status != 'done'">
+                            <field name="email_sent" widget="boolean_toggle" readonly="1" />
+                            <field name="inapp_sent" widget="boolean_toggle" readonly="1" />
+                            <field name="whatsapp_sent" widget="boolean_toggle" readonly="1" />
+                        </group>
+                        <separator string="Findings" />
+                        <field name="digest_html" nolabel="1"
+                            groups="!pulse_digest.group_pulse_admin" />
+                        <field name="line_ids" readonly="1"
+                            groups="pulse_digest.group_pulse_admin">
+                            <list edit="0" default_order="severity_sequence"
+                                decoration-danger="severity == 'critical'"
+                                decoration-warning="severity == 'warning'"
+                                decoration-muted="severity == 'info'">
+                                <field name="severity" widget="badge"
+                                    decoration-danger="severity == 'critical'"
+                                    decoration-warning="severity == 'warning'"
+                                    decoration-info="severity == 'info'" />
+                                <field name="detector_id" />
+                                <field name="res_name" />
+                                <field name="summary" />
+                                <field name="metric_value" optional="hide" />
+                                <field name="baseline_value" optional="hide" />
+                                <field name="deviation" optional="hide" />
+                                <field name="detail" optional="hide" />
+                                <field name="severity_sequence" column_invisible="1" />
+                            </list>
+                        </field>
+                    </sheet>
+                    <chatter />
+                </form>
+            </field>
+        </record>
+
+    </data>
+</odoo>

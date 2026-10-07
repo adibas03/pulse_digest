@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Pulse">
+  <title>Pulse</title>
+  <desc>Pulse glyph: an indigo line with a single spike, on transparent background.</desc>
+
+  <polyline points="36,138 100,138 119,138 128,72 144,202 158,90 172,138 220,138"
+            fill="none" stroke="#3D4E8C" stroke-width="14"
+            stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

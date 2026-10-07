@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pulse — Demo data
+
+  Loaded when the database is created with demo data enabled (Odoo's
+  default). Produces a working, runnable Pulse setup so that a developer
+  who just installed the module can trigger a digest from the Run wizard
+  immediately, without first doing 5 minutes of configuration.
+
+  noupdate="1" so demo data doesn't churn on module updates — once
+  installed, it stays as a stable example.
+
+  What this creates:
+    1. A plain demo group (demo_pulse_recipients — not a Pulse permission
+       tier, just a membership bucket) with admin and the standard demo
+       user (Marc Demo) as members.
+    2. A pulse.config for the main company, scheduled at 07:00, "both"
+       digest mode (company-wide + per-user), using that group for both
+       user_group_id (per-user audience) and recipient_group_ids (forwarded
+       to every run regardless of audience) — so a reviewer logged in as
+       demo sees Pulse runs/findings without needing admin, and the two
+       fields demonstrate distinct forwarding paths even though they
+       happen to share membership here.
+    3. The four default-enabled detectors linked and active. The other
+       two (statistical) are linked but inactive, so a reviewer browsing
+       the config sees the full catalog and the enable-by-default vs
+       opt-in distinction.
+    4. admin user also added individually as a company_recipient — kept
+       alongside the group membership above to show that path still works
+       on its own, independent of group-based forwarding.
+-->
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================ -->
+        <!-- Demo recipient bucket                                       -->
+        <!-- ============================================================ -->
+
+        <!-- A plain res.groups used only to pick out "admin + Marc Demo"
+             for the config fields below — not part of the Pulse privilege
+             hierarchy (security/pulse_security.xml) and grants no ACL or
+             rule access on its own; every internal user, Marc included,
+             already gets Pulse's Viewer tier automatically. -->
+        <record id="demo_pulse_recipients" model="res.groups">
+            <field name="name">Pulse Demo Recipients</field>
+            <field name="user_ids" eval="[(6, 0, [ref('base.user_admin'), ref('base.user_demo')])]"/>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Demo Pulse config                                            -->
+        <!-- ============================================================ -->
+
+        <record id="demo_pulse_config_main" model="pulse.config">
+            <field name="name">Daily Pulse</field>
+            <field name="company_id" ref="base.main_company"/>
+            <field name="active" eval="True"/>
+            <field name="run_time">7.0</field>
+            <field name="digest_mode">both</field>
+            <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]"/>
+            <field name="user_group_id" ref="demo_pulse_recipients"/>
+            <field name="recipient_group_ids" eval="[(6, 0, [ref('demo_pulse_recipients')])]"/>
+            <!-- Opt out of the default-detector seeding: the explicit
+                 pulse.config.detector records below define this config's
+                 full set, including the two inactive examples. -->
+            <field name="detector_line_ids" eval="[(5, 0, 0)]"/>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Activated detectors (defaults-on)                            -->
+        <!-- ============================================================ -->
+
+        <record id="demo_config_detector_overdue" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_overdue_invoices"/>
+            <field name="active" eval="True"/>
+        </record>
+
+        <record id="demo_config_detector_credit_limit" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_credit_limit_breach"/>
+            <field name="active" eval="True"/>
+        </record>
+
+        <record id="demo_config_detector_stale_opps" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_stale_opportunities"/>
+            <field name="active" eval="True"/>
+        </record>
+
+        <record id="demo_config_detector_closing_today" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_deals_closing_today"/>
+            <field name="active" eval="True"/>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Linked-but-inactive detectors (statistical, opt-in)          -->
+        <!--                                                              -->
+        <!-- Linked so they show in the config UI with an enable toggle,  -->
+        <!-- demonstrating the "Conservative defaults, statistical ones   -->
+        <!-- visible but off" UX from the spec.                           -->
+        <!-- ============================================================ -->
+
+        <record id="demo_config_detector_payment_outlier" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_account_payment_delay_outlier"/>
+            <field name="active" eval="False"/>
+        </record>
+
+        <record id="demo_config_detector_velocity" model="pulse.config.detector">
+            <field name="config_id" ref="demo_pulse_config_main"/>
+            <field name="detector_id" ref="detector_sale_deal_velocity_drop"/>
+            <field name="active" eval="False"/>
+        </record>
+
+    </data>
+</odoo>

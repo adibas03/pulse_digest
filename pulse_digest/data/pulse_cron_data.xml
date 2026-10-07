@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pulse — Scheduled job
+
+  Single HOURLY cron. Each pulse.config record gates internally on its
+  own run_time (in its own timezone), so one cron serves all configs and
+  every company fires at its configured hour without spawning a cron per
+  record. This is the standard Odoo pattern for "run at a configurable
+  time" — see §7 of the spec for the rationale.
+
+  noupdate="1" so admins re-disabling the cron (e.g. while debugging) do
+  not have their change reverted on the next module update.
+
+  interval_number/interval_type say "every 1 hour," and the cron recurs
+  indefinitely by default — there is no numbercall/doall field to set:
+  both were removed from ir.cron in Odoo 18+ (a prior draft of this file
+  set numbercall=-1 for "run forever," which no longer applies and no
+  longer exists as a field). priority = 5 is mid-low; Pulse should never
+  preempt accounting closing jobs etc.
+-->
+<odoo>
+    <data noupdate="1">
+
+        <record id="cron_pulse_run_digests" model="ir.cron">
+            <field name="name">Pulse: Run Digests</field>
+            <field name="model_id" ref="model_pulse_config" />
+            <field name="state">code</field>
+            <field name="code">model._cron_run_digests()</field>
+            <field name="user_id" ref="base.user_root" />
+            <field name="active" eval="True" />
+            <field name="interval_number">1</field>
+            <field name="interval_type">hours</field>
+            <field name="priority">5</field>
+        </record>
+
+    </data>
+</odoo>

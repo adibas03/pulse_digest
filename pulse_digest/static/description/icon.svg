@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="Pulse">
+  <title>Pulse</title>
+  <desc>Indigo rounded-square icon for the Pulse Odoo module, with a white pulse line and one spike.</desc>
+
+  <!-- Background rounded square: deep indigo -->
+  <rect x="0" y="0" width="256" height="256" rx="40" ry="40" fill="#3D4E8C"/>
+
+  <!-- Flat shadow: a slightly translucent dark version of the glyph offset down-right.
+       This is the "flatshadow" technique that gives Odoo first-party icons their depth.
+       Clipped to the rounded square so the shadow doesn't bleed beyond the icon edge. -->
+  <clipPath id="iconBounds">
+    <rect x="0" y="0" width="256" height="256" rx="40" ry="40"/>
+  </clipPath>
+
+  <g clip-path="url(#iconBounds)">
+    <!-- Shadow layer: the same pulse path, darker indigo, offset and 50% opacity -->
+    <g transform="translate(14,14)" opacity="0.18">
+      <polyline points="36,138 100,138 119,138 128,72 144,202 158,90 172,138 220,138"
+                fill="none" stroke="#1A2347" stroke-width="14"
+                stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+
+    <!-- Main glyph: white pulse line, single spike -->
+    <polyline points="36,138 100,138 119,138 128,72 144,202 158,90 172,138 220,138"
+              fill="none" stroke="#FFFFFF" stroke-width="14"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

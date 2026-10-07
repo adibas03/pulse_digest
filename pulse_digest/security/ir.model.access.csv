@@ -1,0 +1,11 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_pulse_detector_viewer,pulse.detector.viewer,model_pulse_detector,group_pulse_viewer,1,0,0,0
+access_pulse_detector_admin,pulse.detector.admin,model_pulse_detector,group_pulse_admin,1,1,1,1
+access_pulse_config_admin,pulse.config.admin,model_pulse_config,group_pulse_admin,1,1,1,1
+access_pulse_config_viewer,pulse.config.viewer,model_pulse_config,group_pulse_viewer,1,0,0,0
+access_pulse_config_detector_admin,pulse.config.detector.admin,model_pulse_config_detector,group_pulse_admin,1,1,1,1
+access_pulse_config_detector_viewer,pulse.config.detector.viewer,model_pulse_config_detector,group_pulse_viewer,1,0,0,0
+access_pulse_run_viewer,pulse.run.viewer,model_pulse_run,group_pulse_viewer,1,0,0,0
+access_pulse_run_admin,pulse.run.admin,model_pulse_run,group_pulse_admin,1,1,1,1
+access_pulse_run_line_admin,pulse.run.line.admin,model_pulse_run_line,group_pulse_admin,1,1,1,1
+access_pulse_run_wizard_admin,pulse.run.wizard.admin,model_pulse_run_wizard,group_pulse_admin,1,1,1,1

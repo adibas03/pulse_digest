@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Pulse — Mail templates
+
+  Templates referenced from code:
+    - pulse_digest.mail_template_pulse_digest
+        Used by EmailChannel.send (see models/pulse_channel.py).
+        Rendered against a pulse.run record; the actual digest body is
+        passed in via context (`body_html`, `subject`) so the same
+        template serves company-wide and per-user runs with run-specific
+        content.
+
+  The HTML body is intentionally minimal — the findings list itself is
+  rendered once in Python (pulse.run._render_digest_body, plain Markup, no
+  QWeb) and passed in via context as body_html, so EmailChannel and
+  InAppChannel both reuse the same rendering. No portal page exists or is
+  planned for this module (recipients are internal users with backend
+  access); this template's chrome is the only place body_html is shown.
+
+  noupdate="1" lets admins customize templates without losing changes on
+  module update — standard Odoo mail-template hygiene.
+-->
+<odoo>
+    <data noupdate="1">
+
+        <record id="mail_template_pulse_digest" model="mail.template">
+            <field name="name">Pulse: Daily Digest</field>
+            <field name="model_id" ref="model_pulse_run" />
+            <field name="subject">{{ ctx.get('subject') or (object.config_id.name or 'Pulse Digest') + ' — ' + (object.started_at and object.started_at.strftime('%Y-%m-%d') or '') }}</field>
+            <field name="email_from">{{ (object.company_id.email or user.email) }}</field>
+            <field name="email_to">{{ ctx.get('email_to') or '' }}</field>
+            <field name="auto_delete" eval="False" />
+            <field name="body_html" type="html">
+                <div
+                    style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 640px; margin: 0 auto; color: #2c3e50;">
+                    <div
+                        style="border-bottom: 2px solid #875A7B; padding-bottom: 12px; margin-bottom: 24px;">
+                        <h2 style="margin: 0; font-size: 20px; color: #875A7B;"><t t-out="object.config_id.name or 'Pulse Digest'" /></h2>
+                        <p style="margin: 4px 0 0 0; font-size: 13px; color: #7f8c8d;">
+                            <t
+                                t-out="object.started_at and object.started_at.strftime('%A, %d %B %Y') or ''" />
+                            <t t-if="object.audience == 'user'"> · Personal digest</t>
+                            <t t-else=""> · <t t-out="object.company_id.name" /></t>
+                        </p>
+                    </div>
+
+                    <!-- Body is injected via context (body_html). The portal template
+         produces this fragment from the run.line_ids; the email channel
+         renders it once and passes it in so we don't QWeb-render twice. -->
+                    <t t-raw="ctx.get('body_html') or ''" />
+
+                    <div
+                        style="margin-top: 32px; padding-top: 16px; border-top: 1px solid #ecf0f1; font-size: 12px; color: #95a5a6;">
+                        <p style="margin: 0;"> You're receiving this because Pulse is configured to
+                            email you the daily digest. <a
+                                t-att-href="ctx.get('preferences_url') or '#'"
+                                style="color: #875A7B;">Manage your Pulse preferences</a>. </p>
+                    </div>
+                </div>
+            </field>
+        </record>
+
+    </data>
+</odoo>
