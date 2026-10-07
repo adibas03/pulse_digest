@@ -1919,9 +1919,9 @@ history. What's actually built:
 
 ### 8.1 Groups (`security/pulse_security.xml`) — actual: three tiers, each implying the one below
 
-- `group_pulse_viewer` — read-only visibility into `pulse.config` and the
-  `pulse.detector` catalog, and — through `pulse_run_user_rule` (§8.3) — into
-  the runs the user is actually a recipient of. **Implied by
+- `group_pulse_viewer` — read-only visibility into the `pulse.detector`
+  catalog and — through `pulse_config_user_rule` and `pulse_run_user_rule`
+  (§8.3) — into the configs and runs the user is actually a recipient of. **Implied by
   `base.group_user`** (Odoo's "Internal User" group), so it's granted
   automatically to every employee — not something an admin assigns
   individually. Answers "what is Pulse configured to do, and what was I
@@ -1946,8 +1946,8 @@ of `privilege_id` pointing at this new model (§1b).
 | Model                   | Viewer                                 | Recipient          | Admin (read/write/create/delete) |
 | ----------------------- | -------------------------------------- | ------------------ | --------------------------------- |
 | `pulse.detector`        | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
-| `pulse.config`          | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
-| `pulse.config.detector` | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
+| `pulse.config`          | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
+| `pulse.config.detector` | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
 | `pulse.run`             | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
 | `pulse.run.line`        | –                                      | –                  | ✓ all                              |
 | `pulse.run.wizard`      | –                                      | –                  | ✓ all                              |
@@ -1960,7 +1960,7 @@ be able to open the run it links to. `pulse.run.line` is deliberately the
 opposite: admin-only, with non-admins reading findings through
 `pulse.run.digest_html` instead (§8.3).
 
-### 8.3 Record rules — run access follows the audience; lines are admin-only
+### 8.3 Record rules — config and run access follow the audience; lines are admin-only
 
 **`pulse.run` — `pulse_run_user_rule`, attached at the Viewer tier.** A run
 is visible to the people it is actually for, evaluated live against the
@@ -2090,20 +2090,26 @@ discloses a hidden count rather than the run silently skipping them (§6).
 The same filter now backs `digest_html` (above), so the delivered digest
 and the in-app view can't disagree about what a recipient may see.
 
-**A parallel gap in `pulse.config.detector` — found, deliberately left
-open, low priority.** Same shape as the `pulse.run.line` gap this section
-used to describe (ACL grants Viewer read=1 with no row-scoping, so a plain
-internal user in a multi-company instance can `search()`
-`pulse.config.detector` directly and see every company's linked detectors,
-active state, and `params` overrides — not just their own company's, the way
-`pulse.config` itself is scoped via `pulse_config_company_rule`). Left
-unfixed, unlike the `pulse.run.line` case, because what it actually exposes
-is different in kind, not just degree: `params` holds detector *tuning*
-(e.g. `min_days_overdue`, `severity_thresholds: {"warning": 30, "critical":
-60}`) — policy/configuration choices, not business content like a customer
-name, an amount owed, or a specific finding. Revisit if a future detector's
-params ever end up holding something genuinely sensitive, or if real
-multi-company usage shows this mattering in practice.
+**`pulse.config` and `pulse.config.detector` — `pulse_config_user_rule` and
+`pulse_config_detector_user_rule`, attached at the Viewer tier.** With
+several configs per company (one digest per team), letting every internal
+user read every config would expose each team's recipient list and detector
+tuning to the whole company, so a config is visible only to the people it
+would deliver to — the same test as `is_user_recipient`, per `digest_mode`:
+`company_recipient_ids` in company/both mode, `user_group_id` members in
+per-user/both mode, `recipient_group_ids` members in every mode (all via
+`all_user_ids`, live). Admins see everything through their own explicit
+rules (`pulse_config_admin_rule`, `pulse_config_detector_admin_rule`). Same
+attach-at-the-ACL-tier reasoning as the run rule, and the same reason for
+the explicit admin rules: an admin implies Viewer, so without them the
+Viewer rule would constrain admins. Detector lines apply the same test
+through `config_id`, replacing the earlier "no row rule, deliberately left
+open" position — the form still shows the Detectors tab to whoever can open
+the config, so the lines must be readable for exactly those configs and no
+others. The rule duplicates the compute's logic on purpose (a rule can't
+call it); `TestConfigVisibility.test_visibility_agrees_with_is_user_recipient`
+keeps the two in step. The History button gate (`is_user_recipient`) is
+unchanged; for a non-admin it is now true for every config they can open.
 
 Other rules, unchanged: an explicit `pulse_run_admin_rule`
 (`domain_force = [(1, '=', 1)]` for `group_pulse_admin`) so the
@@ -2118,7 +2124,7 @@ companies.
 
 ## 9. Test plan
 
-**BUILT.** `tests/` exists with 13 test files (plus `common.py` for shared fixtures), 193 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
+**BUILT.** `tests/` exists with 13 test files (plus `common.py` for shared fixtures), 205 test methods total, and passes against a real Odoo 19 instance (`scripts/run-tests.sh`). Table below reflects the actual files and their real coverage, not the original aspirational split (e.g. detector tests are consolidated per-app, not one file per detector; there is no separate per-user-filtering file — that coverage is inline in `test_run_execution.py` and each detector file's own user-scope tests).
 
 Tests live in `tests/`.
 
@@ -2130,7 +2136,7 @@ Tests live in `tests/`.
 | `test_detectors_accounting.py`  | The three accounting detectors (`overdue_invoices`, `payment_delay_outlier`, `credit_limit_breach`): severity buckets against `SEVERITY_*` constants, statistical baseline/z-score behavior, `with_company` correctness across companies, the no-salesperson exclusion from per-user runs, user-scope filtering                                                |
 | `test_detectors_sales.py`       | The three sales/CRM detectors (`stale_opportunities`, `deals_closing_today`, `deal_velocity_drop`): same shape of coverage as the accounting file, scoped to `crm.lead`                                                                                                                                                                                          |
 | `test_run_execution.py`         | `run_digest`/`run_all_audiences`, per-hour dedup (including per-user scoping and the `force` bypass), `_cron_is_due`/`_cron_run_digests` gating, and exception isolation — a failing detector marks its run failed without killing the process, and one config's failure doesn't block another company's cron tick                                             |
-| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); run visibility follows the audience, not the tier (`TestRunVisibility`, using a plain internal user: own per-user run, listed company recipient, recipient-group member, live add/remove of group and company recipients, another company's group member blocked by the company rule, read-only); `pulse.run.line` is admin-only — every non-admin path, including the recipient of the run reading its own lines, raises `AccessError`; non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both                                 |
+| `test_security.py`              | The three-tier group hierarchy (implication chain, every internal user gets Viewer); run visibility follows the audience, not the tier (`TestRunVisibility`, using a plain internal user: own per-user run, listed company recipient, recipient-group member, live add/remove of group and company recipients, another company's group member blocked by the company rule, read-only); `pulse.run.line` is admin-only — every non-admin path, including the recipient of the run reading its own lines, raises `AccessError`; non-admins (plain internal users and Recipients alike) are blocked from `action_admin_run_now` and from the `pulse.run.wizard`, with admin positive controls for both Config visibility (`TestConfigVisibility`): a config, and its detector lines, are visible only to its recipients per `digest_mode` and to admins, follow live group membership, differ per team, and agree with `is_user_recipient`. |
 | `test_suppression_gate.py`      | **Scope reduced this iteration** (backoff schedule shelved — see §14): self-limiting detectors (`SUPPRESSIBLE = False`) always deliver; `SUPPRESSIBLE = True` + `AGE_FIELD = None` always delivers (the credit_limit_breach case) — the gate is a pass-through for every v1 combination. Deferred to the version that ships the backoff: phase-schedule correctness, the 7-day cap, missing/null anchor defaulting to deliver, and `suppression_reason` population. |
 | `test_channel_dispatch.py`      | `_dispatch_run`'s config-level × user-level channel gate; `email_sent`/`inapp_sent`/`whatsapp_sent` verified against the real `mail.mail` queue and `run.message_ids`, not just the flags; WhatsApp's no-op when the `whatsapp` module isn't installed; per-channel and per-recipient failure isolation via a fake channel patched into the registry; the render-time re-check's dispatch-level integration — a recipient with a fully-restricted finding still gets dispatched to (no silent skip) and the delivered message discloses the hidden count without leaking the restricted content |
 | `test_pulse_run_wizard.py`      | `allowed_user_ids` reflects the config's `user_group_id`; `action_run` raises on a missing `user_id` for per-user audience, raises if `user_id` is set but outside `allowed_user_ids` (server-side re-validation added — no longer just a client-side view domain), and delegates correctly to `action_admin_run_now` for both audiences                                                                    |
@@ -2254,8 +2260,8 @@ These are deliberate non-goals for v1 so they don't creep:
 - **Manual per-user trigger wizard — built.** `wizards/pulse_run_wizard.py` + `wizards/pulse_run_wizard_views.xml` expose `pulse.config.action_admin_run_now`'s existing per-user targeting (previously only reachable at the model layer) via a "Run For User..." header button on `pulse.config`'s form, admin-only. The wizard restricts `user_id` to the config's own `user_group_id` membership so an admin can't accidentally trigger a run for someone the config never intended to include — originally enforced only client-side by the view's domain, `action_run` now re-validates `user_id` against `allowed_user_ids` itself and raises `UserError` if it's outside the group, so the restriction holds even against direct ORM/RPC calls that bypass the wizard form.
 - **`pulse.run.line` access re-check on render — built; `pulse.run.line` access itself — now admin-only.** See §8.3 for the full history: the render-time re-check (`_filter_lines_readable_by`) was built, reverted on the belief it wasn't needed, then rebuilt after external review showed that conclusion was incomplete. The per-user record rule this bullet used to list for `pulse.run.line` was later removed along with its Recipient ACL row, once run access was opened to the audience (next bullet) and exposing raw lines to that audience would have reopened the same leak in the backend.
 - **Group-based recipients (`recipient_group_ids`) — built.** `pulse.config.recipient_group_ids` (Many2many `res.groups`) decouples "whose records a run is scoped to" from "who receives it": every member of a linked group who belongs to the run's own company is unioned into that run's recipients, for company-wide *and* per-user runs alike — resolved live at dispatch time, no config edit needed when group membership changes. `company_recipient_ids` (individual users) stays company-wide-specific and unchanged; `recipient_group_ids` is audience-agnostic. Group membership deciding *who receives* a digest is still the deliberate access decision (same trust tier as `company_recipient_ids`) — but that's a separate question from whether digest *content* can exceed what a specific recipient could otherwise read, which is what `_filter_lines_readable_by`'s render-time re-check (§6/§8.3) actually closes. See `pulse.config._check_company_recipients_set` for the save-time guarantee that company-wide mode always has at least one recipient (user or group).
-- **Run access follows the audience — built.** A dispatched recipient can now open the run their digest links to, regardless of Pulse tier: `pulse.run` is readable at the Viewer tier, with `pulse_run_user_rule` (attached at Viewer) limiting rows to own per-user runs, company-wide runs for listed `company_recipient_ids`, and any run for `recipient_group_ids` members — live against the config, deliberately not a per-run snapshot. Non-admins read findings through the per-user, access-filtered `pulse.run.digest_html`; raw `pulse.run.line` stays admin-only. The config form's History button (`pulse.config.is_user_recipient`) is the UI gate over the same audience. Known and accepted: chatter on the run isn't gated, and the run's stored counts/worst-severity cover findings the viewer can't see (§8.3).
-- **Several configs per company — built.** The old `UNIQUE(company_id)` is relaxed to `UNIQUE(company_id, name)` (§4.2), so a company can run one digest per team (e.g. sales and accounting), each with its own detectors, schedule and recipients (a new config is seeded with the `is_default_enabled` detectors, §4.2); the config name leads the digest subject and the email header. The cron, dedup, `last_run_date`, run visibility and the History gate were already per config. Caveats: the digest mail template is `noupdate="1"`, so an existing database keeps the old hardcoded header until the template record is edited or reset; per-user channel preferences on `res.users` stay all-or-nothing across configs; and a per-user run scopes by the user's `company_id`, not the config's.
+- **Run access follows the audience — built.** A dispatched recipient can now open the run their digest links to, regardless of Pulse tier: `pulse.run` is readable at the Viewer tier, with `pulse_run_user_rule` (attached at Viewer) limiting rows to own per-user runs, company-wide runs for listed `company_recipient_ids`, and any run for `recipient_group_ids` members — live against the config, deliberately not a per-run snapshot. Non-admins read findings through the per-user, access-filtered `pulse.run.digest_html`; raw `pulse.run.line` stays admin-only. The config form's History button (`pulse.config.is_user_recipient`) is the UI gate over the same audience, and configs themselves are now visible only to that audience (§8.3). Known and accepted: chatter on the run isn't gated, and the run's stored counts/worst-severity cover findings the viewer can't see (§8.3).
+- **Several configs per company — built.** The old `UNIQUE(company_id)` is relaxed to `UNIQUE(company_id, name)` (§4.2), so a company can run one digest per team (e.g. sales and accounting), each with its own detectors, schedule and recipients (a new config is seeded with the `is_default_enabled` detectors, §4.2; a config is visible only to its recipients and admins, §8.3); the config name leads the digest subject and the email header. The cron, dedup, `last_run_date`, run visibility and the History gate were already per config. Caveats: the digest mail template is `noupdate="1"`, so an existing database keeps the old hardcoded header until the template record is edited or reset; per-user channel preferences on `res.users` stay all-or-nothing across configs; and a per-user run scopes by the user's `company_id`, not the config's.
 - **v1.1 idea, not started: per-group cross-company override for `recipient_group_ids`.** Today every group-forwarded recipient is filtered to the run's own company, unconditionally — correct for the common case, but blocks a genuine use case: a holding-company/multi-entity setup wanting one group (e.g. an executive team) to receive digests across every subsidiary company regardless of the run's company. Can't be a single global toggle, since a config might reasonably want some linked groups company-filtered and others not — would need `recipient_group_ids` to move from a plain Many2many to a proper line/join model (config + group + a per-line "ignore company boundary" flag), mirroring how `pulse.config.detector` already pairs a config with per-line settings.
 
 Pin this list to the GitHub repo as a README section. It signals discipline.

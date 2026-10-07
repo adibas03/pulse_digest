@@ -4,9 +4,9 @@
 
   Three tiers, each implying the one below:
     group_pulse_viewer    — implied by base.group_user (every internal user).
-                            Read-only view of the config and detector
-                            catalog, and — via pulse_run_user_rule — of the
-                            runs they are a recipient of.
+                            Read-only view of the detector catalog and —
+                            via pulse_config_user_rule / pulse_run_user_rule
+                            — of the configs and runs they are a recipient of.
     group_pulse_recipient — implies viewer. Can edit own res.users channel
                             preferences.
     group_pulse_admin     — implies recipient. Configures detectors, recipient
@@ -20,7 +20,9 @@
       of — their own per-user runs, company-wide runs they are a listed
       recipient of, and any run of a config whose recipient groups they
       belong to. Attached at the Viewer tier (see the rule's own comment).
-    - admins see everything via their own explicit rule.
+    - pulse_config_user_rule (and the same test on pulse.config.detector):
+      a user sees only the configs they would receive the digest of.
+    - admins see everything via their own explicit rules.
     - pulse.run.line is admin-only; non-admins read findings through the
       access-filtered pulse.run.digest_html instead.
 
@@ -145,6 +147,63 @@
             <field name="global" eval="True" />
             <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in',
                 company_ids)]</field>
+        </record>
+
+        <!-- A config is visible to the people it is actually for, not to
+             every internal user: admins (rule below), plus anyone who would
+             receive its digest — the same test as pulse.config.
+             is_user_recipient, evaluated per digest_mode:
+               - company_recipient_ids in company / both mode;
+               - user_group_id members in per_user / both mode;
+               - recipient_group_ids members in every mode.
+             Attached to group_pulse_viewer for the same reason as
+             pulse_run_user_rule: ACL read is granted at that tier, and with
+             no non-global rule attached there everyone would see every
+             config. Keep in step with _compute_is_user_recipient. -->
+        <record id="pulse_config_user_rule" model="ir.rule">
+            <field name="name">Pulse Config: configs I am a recipient of</field>
+            <field name="model_id" ref="model_pulse_config" />
+            <field name="domain_force">['|', '|',
+                '&amp;', ('digest_mode', 'in', ['company', 'both']), ('company_recipient_ids', 'in', [user.id]),
+                '&amp;', ('digest_mode', 'in', ['per_user', 'both']), ('user_group_id.all_user_ids', 'in', [user.id]),
+                ('recipient_group_ids.all_user_ids', 'in', [user.id])]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_viewer'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="False" />
+            <field name="perm_create" eval="False" />
+            <field name="perm_unlink" eval="False" />
+        </record>
+
+        <record id="pulse_config_admin_rule" model="ir.rule">
+            <field name="name">Pulse Config: all configs (admins)</field>
+            <field name="model_id" ref="model_pulse_config" />
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_admin'))]" />
+        </record>
+
+        <!-- Detector lines follow their config: read at the Viewer tier
+             (the config form's Detectors tab), so the same audience test
+             applies through config_id — otherwise a non-recipient could
+             read the lines of a config they cannot open. -->
+        <record id="pulse_config_detector_user_rule" model="ir.rule">
+            <field name="name">Pulse Config Detector: lines of configs I am a recipient of</field>
+            <field name="model_id" ref="model_pulse_config_detector" />
+            <field name="domain_force">['|', '|',
+                '&amp;', ('config_id.digest_mode', 'in', ['company', 'both']), ('config_id.company_recipient_ids', 'in', [user.id]),
+                '&amp;', ('config_id.digest_mode', 'in', ['per_user', 'both']), ('config_id.user_group_id.all_user_ids', 'in', [user.id]),
+                ('config_id.recipient_group_ids.all_user_ids', 'in', [user.id])]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_viewer'))]" />
+            <field name="perm_read" eval="True" />
+            <field name="perm_write" eval="False" />
+            <field name="perm_create" eval="False" />
+            <field name="perm_unlink" eval="False" />
+        </record>
+
+        <record id="pulse_config_detector_admin_rule" model="ir.rule">
+            <field name="name">Pulse Config Detector: all lines (admins)</field>
+            <field name="model_id" ref="model_pulse_config_detector" />
+            <field name="domain_force">[(1, '=', 1)]</field>
+            <field name="groups" eval="[(4, ref('group_pulse_admin'))]" />
         </record>
 
         <record id="pulse_config_company_rule" model="ir.rule">

@@ -59,7 +59,10 @@ class TestMultiConfigPerCompany(PulseTransactionCase):
             "Sales Digest",
             company_recipient_ids=[(6, 0, [plain.id])])
         self.assertTrue(sales.with_user(plain).is_user_recipient)
-        self.assertFalse(self.config.with_user(plain).is_user_recipient)
+        # sudo() keeps the uid; the config itself is hidden from plain.
+        self.assertFalse(self.config.with_user(plain).sudo().is_user_recipient)
+        self.assertFalse(self.env["pulse.config"].with_user(plain).search(
+            [("id", "=", self.config.id)]))
 
     def test_subject_carries_the_config_name(self):
         sales = self._make_config("Sales Digest")

@@ -29,11 +29,12 @@ class TestViewerAccess(PulseTransactionCase):
     """A plain internal user — no explicit Pulse group — should get Viewer
     automatically via base.group_user."""
 
-    def test_plain_internal_user_can_read_pulse_config(self):
+    def test_plain_internal_user_cannot_read_a_config_they_are_not_a_recipient_of(self):
         plain_user = self._make_user(
             "Plain Internal User", "pulse_plain_user",
             self.env.ref("base.group_user"))
-        self.config.with_user(plain_user).read(["name"])  # must not raise
+        with self.assertRaises(AccessError):
+            self.config.with_user(plain_user).read(["name"])
 
     def test_plain_internal_user_can_read_detector_catalog(self):
         plain_user = self._make_user(
@@ -302,6 +303,160 @@ class TestRunVisibility(PulseTransactionCase):
             run.with_user(self.viewer).write({"status": "failed"})
         with self.assertRaises(AccessError):
             run.with_user(self.viewer).unlink()
+
+
+class TestConfigVisibility(PulseTransactionCase):
+    """pulse_config_user_rule (attached at the Viewer tier): a config is
+    visible to the people it would deliver to — mirroring
+    pulse.config.is_user_recipient per digest_mode — and to admins, and to
+    nobody else. Uses a plain internal user (Viewer via base.group_user only).
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.viewer = cls._make_user(
+            "Config Viewer", "pulse_config_viewer_only",
+            cls.env.ref("base.group_user"))
+        cls.audience = cls.env["res.groups"].create({"name": "Config Audience"})
+
+    def _visible(self, user, config=None):
+        config = config or self.config
+        return bool(self.env["pulse.config"].with_user(user).search(
+            [("id", "=", config.id)]))
+
+    def test_unlisted_internal_user_sees_no_config(self):
+        self.assertFalse(self._visible(self.viewer))
+
+    def test_company_recipient_sees_config_in_company_mode(self):
+        self.config.write({
+            "digest_mode": "company",
+            "company_recipient_ids": [(4, self.viewer.id)],
+        })
+        self.assertTrue(self._visible(self.viewer))
+
+    def test_company_recipient_does_not_see_config_in_per_user_mode(self):
+        self.config.write({
+            "digest_mode": "per_user",
+            "company_recipient_ids": [(4, self.viewer.id)],
+        })
+        self.assertFalse(self._visible(self.viewer))
+
+    def test_user_group_member_sees_config_in_per_user_mode(self):
+        self.config.write({
+            "digest_mode": "per_user",
+            "user_group_id": self.audience.id,
+        })
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        self.assertTrue(self._visible(self.viewer))
+
+    def test_user_group_member_does_not_see_config_in_company_mode(self):
+        self.config.write({
+            "digest_mode": "company",
+            "user_group_id": self.audience.id,
+        })
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        self.assertFalse(self._visible(self.viewer))
+
+    def test_recipient_group_member_sees_config_in_every_mode(self):
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        for mode in ("company", "per_user", "both"):
+            self.config.write({
+                "digest_mode": mode,
+                "recipient_group_ids": [(6, 0, [self.audience.id])],
+            })
+            self.assertTrue(self._visible(self.viewer), mode)
+
+    def test_access_follows_group_membership_live(self):
+        self.config.recipient_group_ids = [(6, 0, [self.audience.id])]
+        self.assertFalse(self._visible(self.viewer))
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        self.assertTrue(self._visible(self.viewer))
+        self.audience.user_ids = [(3, self.viewer.id)]
+        self.env.flush_all()
+        self.assertFalse(self._visible(self.viewer))
+
+    def test_admin_sees_every_config(self):
+        hidden = self.env["pulse.config"].create({
+            "name": "Not Listing The Admin",
+            "company_id": self.config.company_id.id,
+            "digest_mode": "company",
+            "company_recipient_ids": [(6, 0, [self.user_a.id])],
+        })
+        self.assertTrue(self._visible(self.user_admin, hidden))
+
+    def test_teams_only_see_their_own_config(self):
+        sales = self.env["pulse.config"].create({
+            "name": "Sales Team Digest",
+            "company_id": self.config.company_id.id,
+            "digest_mode": "company",
+            "recipient_group_ids": [(6, 0, [self.audience.id])],
+        })
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        self.assertTrue(self._visible(self.viewer, sales))
+        self.assertFalse(self._visible(self.viewer, self.config))
+
+    def test_visibility_agrees_with_is_user_recipient(self):
+        # The rule duplicates the compute's logic; keep them in step.
+        self.audience.user_ids = [(4, self.viewer.id)]
+        self.env.flush_all()
+        scenarios = [
+            {"digest_mode": "company", "company_recipient_ids": [(6, 0, [self.viewer.id])],
+             "user_group_id": False, "recipient_group_ids": [(5, 0, 0)]},
+            {"digest_mode": "per_user", "company_recipient_ids": [(6, 0, [self.viewer.id])],
+             "user_group_id": False, "recipient_group_ids": [(5, 0, 0)]},
+            {"digest_mode": "per_user", "company_recipient_ids": [(5, 0, 0)],
+             "user_group_id": self.audience.id, "recipient_group_ids": [(5, 0, 0)]},
+            {"digest_mode": "company", "company_recipient_ids": [(4, self.user_admin.id)],
+             "user_group_id": self.audience.id, "recipient_group_ids": [(5, 0, 0)]},
+            {"digest_mode": "both", "company_recipient_ids": [(4, self.user_admin.id)],
+             "user_group_id": False, "recipient_group_ids": [(6, 0, [self.audience.id])]},
+            {"digest_mode": "both", "company_recipient_ids": [(4, self.user_admin.id)],
+             "user_group_id": False, "recipient_group_ids": [(5, 0, 0)]},
+        ]
+        for vals in scenarios:
+            self.config.write({**vals, "company_recipient_ids": vals["company_recipient_ids"]})
+            flag = self.config.with_user(self.viewer).sudo().is_user_recipient
+            self.assertEqual(self._visible(self.viewer), flag, vals)
+
+    def test_detector_lines_follow_their_config(self):
+        detector = self.env["pulse.detector"].create({
+            "name": "Visibility Fixture",
+            "technical_name": "test.config_visibility_fixture",
+            "category": "accounting",
+            "detector_class": "x.y.Z",  # never resolved
+        })
+        line = self.env["pulse.config.detector"].create({
+            "config_id": self.config.id,
+            "detector_id": detector.id,
+        })
+        lines = self.env["pulse.config.detector"].with_user(self.viewer)
+        self.assertFalse(lines.search([("id", "=", line.id)]))
+        self.config.write({
+            "digest_mode": "company",
+            "company_recipient_ids": [(4, self.viewer.id)],
+        })
+        self.assertTrue(lines.search([("id", "=", line.id)]))
+
+    def test_admin_sees_every_detector_line(self):
+        detector = self.env["pulse.detector"].create({
+            "name": "Visibility Fixture 2",
+            "technical_name": "test.config_visibility_fixture_2",
+            "category": "accounting",
+            "detector_class": "x.y.Z",
+        })
+        line = self.env["pulse.config.detector"].create({
+            "config_id": self.config.id,
+            "detector_id": detector.id,
+        })
+        found = self.env["pulse.config.detector"].with_user(
+            self.user_admin).search([("id", "=", line.id)])
+        self.assertTrue(found)
 
 
 class TestAdminAccess(PulseTransactionCase):

@@ -171,7 +171,11 @@ class TestIsUserRecipient(PulseTransactionCase):
             cls.env.ref("base.group_user"))
 
     def _flag(self, user):
-        return self.config.with_user(user).is_user_recipient
+        # sudo() keeps the uid (the compute is per viewing user) but skips
+        # the config record rule, which hides configs from non-recipients
+        # — the flag is what's under test here, not row visibility (see
+        # TestConfigVisibility in test_security.py).
+        return self.config.with_user(user).sudo().is_user_recipient
 
     def test_admin_is_always_a_recipient(self):
         self.config.company_recipient_ids = [(6, 0, [self.user_a.id])]
