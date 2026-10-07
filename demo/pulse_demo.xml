@@ -11,36 +11,39 @@
   installed, it stays as a stable example.
 
   What this creates:
-    1. A pulse.config for the main company, scheduled at 07:00, "both"
-       digest mode (company-wide + per-user).
-    2. The four default-enabled detectors linked and active. The other
+    1. A plain demo group (demo_pulse_recipients — not a Pulse permission
+       tier, just a membership bucket) with admin and the standard demo
+       user (Marc Demo) as members.
+    2. A pulse.config for the main company, scheduled at 07:00, "both"
+       digest mode (company-wide + per-user), using that group for both
+       user_group_id (per-user audience) and recipient_group_ids (forwarded
+       to every run regardless of audience) — so a reviewer logged in as
+       demo sees Pulse runs/findings without needing admin, and the two
+       fields demonstrate distinct forwarding paths even though they
+       happen to share membership here.
+    3. The four default-enabled detectors linked and active. The other
        two (statistical) are linked but inactive, so a reviewer browsing
        the config sees the full catalog and the enable-by-default vs
        opt-in distinction.
-    3. admin user added as the company digest recipient.
-    4. The standard demo user (Marc Demo) granted Recipient access, so a
-       reviewer logged in as demo sees Pulse runs/findings without needing
-       admin.
-    5. The Recipient group set as recipient_group_ids, so every run —
-       company-wide or per-user alike — also forwards to that group's
-       current members. In this demo, that's admin (implied via the
-       Administrator group) and Marc Demo, demonstrating group-based
-       forwarding distinct from admin's individual company_recipient_ids
-       listing above.
+    4. admin user also added individually as a company_recipient — kept
+       alongside the group membership above to show that path still works
+       on its own, independent of group-based forwarding.
 -->
 <odoo>
     <data noupdate="1">
 
         <!-- ============================================================ -->
-        <!-- Demo user access                                             -->
+        <!-- Demo recipient bucket                                       -->
         <!-- ============================================================ -->
 
-        <!-- Grants the standard Odoo demo user (Marc Demo) recipient access
-             so a reviewer logged in as demo can see Pulse runs/findings
-             without needing admin. -->
-
-        <record id="base.user_demo" model="res.users">
-            <field name="group_ids" eval="[(4, ref('group_pulse_recipient'))]" />
+        <!-- A plain res.groups used only to pick out "admin + Marc Demo"
+             for the config fields below — not part of the Pulse privilege
+             hierarchy (security/pulse_security.xml) and grants no ACL or
+             rule access on its own; every internal user, Marc included,
+             already gets Pulse's Viewer tier automatically. -->
+        <record id="demo_pulse_recipients" model="res.groups">
+            <field name="name">Pulse Demo Recipients</field>
+            <field name="user_ids" eval="[(6, 0, [ref('base.user_admin'), ref('base.user_demo')])]"/>
         </record>
 
         <!-- ============================================================ -->
@@ -54,8 +57,8 @@
             <field name="run_time">7.0</field>
             <field name="digest_mode">both</field>
             <field name="company_recipient_ids" eval="[(6, 0, [ref('base.user_admin')])]"/>
-            <field name="user_group_id" ref="group_pulse_recipient"/>
-            <field name="recipient_group_ids" eval="[(6, 0, [ref('group_pulse_recipient')])]"/>
+            <field name="user_group_id" ref="demo_pulse_recipients"/>
+            <field name="recipient_group_ids" eval="[(6, 0, [ref('demo_pulse_recipients')])]"/>
             <!-- Opt out of the default-detector seeding: the explicit
                  pulse.config.detector records below define this config's
                  full set, including the two inactive examples. -->

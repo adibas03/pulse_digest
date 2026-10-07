@@ -21,8 +21,12 @@ class PulseTransactionCase(TransactionCase):
             cls.env.context, pulse_no_default_detectors=True))
 
         cls.group_viewer = cls.env.ref("pulse_digest.group_pulse_viewer")
-        cls.group_recipient = cls.env.ref("pulse_digest.group_pulse_recipient")
         cls.group_admin = cls.env.ref("pulse_digest.group_pulse_admin")
+        # A plain group used only as a membership bucket for the fixture's
+        # per-user audience — not a Pulse permission tier (that's just
+        # group_viewer/group_admin now; see pulse_security.xml's header).
+        cls.group_recipient = cls.env["res.groups"].create(
+            {"name": "Test Pulse Recipients"})
 
         cls.user_a = cls._make_user("Pulse User A", "pulse_user_a",
                                      cls.group_recipient)

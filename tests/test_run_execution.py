@@ -114,11 +114,11 @@ class TestRunExecution(PulseTransactionCase):
         self.assertIn("user", audiences)
 
     def test_run_all_audiences_includes_admin_via_group_membership(self):
-        # user_group_id defaults to group_pulse_recipient; group_pulse_admin
-        # implies it. Whether that's via all_user_ids' computed inclusion or
-        # Odoo's own implied-group membership propagation, the observable
-        # contract is the same: an admin ends up covered by a per-user run
-        # without needing separate explicit Recipient membership.
+        # user_group_id has no special case for admins — whoever is a
+        # member of the configured group gets a per-user run, admin
+        # included, the same as any other member.
+        self.config.user_group_id.user_ids = [(4, self.user_admin.id)]
+        self.env.flush_all()
         self.config.digest_mode = "per_user"
         self._link_detector("test.always_finds_one")
         self.config.run_all_audiences()

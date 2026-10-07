@@ -1,7 +1,14 @@
 # tests/test_security.py
-"""Tests for the Pulse security model: three-tier groups (Viewer, implied by
-every internal user; Recipient; Administrator), the ACL split between them,
-and the record rule scoping pulse.run to "own runs only" for recipients.
+"""Tests for the Pulse security model: two-tier groups (Viewer, implied by
+every internal user; Administrator), the ACL split between them, and the
+record rules scoping pulse.config/pulse.run to actual recipients.
+
+There used to be a third tier, Recipient, between the two — removed (see
+pulse_security.xml's header): nothing checked membership in it, since
+config/run visibility was always decided by real recipient-list membership,
+not Pulse tier. self.group_recipient (from the shared fixture) is now just
+a plain membership bucket used to build a per-user audience group for
+tests, not a Pulse group — see common.py.
 """
 from odoo.exceptions import AccessError
 
@@ -10,19 +17,15 @@ from .common import PulseTransactionCase
 
 class TestGroupHierarchy(PulseTransactionCase):
 
-    def test_admin_implies_recipient(self):
-        self.assertIn(self.group_recipient, self.group_admin.implied_ids)
-
-    def test_recipient_implies_viewer(self):
-        self.assertIn(self.group_viewer, self.group_recipient.implied_ids)
+    def test_admin_implies_viewer(self):
+        self.assertIn(self.group_viewer, self.group_admin.implied_ids)
 
     def test_every_internal_user_has_viewer(self):
         internal_group = self.env.ref("base.group_user")
         self.assertIn(self.group_viewer, internal_group.implied_ids)
 
-    def test_admin_user_is_transitively_a_viewer_and_recipient(self):
+    def test_admin_user_is_transitively_a_viewer(self):
         self.assertIn(self.user_admin, self.group_viewer.all_user_ids)
-        self.assertIn(self.user_admin, self.group_recipient.all_user_ids)
 
 
 class TestViewerAccess(PulseTransactionCase):

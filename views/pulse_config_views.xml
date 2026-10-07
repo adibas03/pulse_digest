@@ -19,7 +19,6 @@
                             class="btn-secondary"
                             invisible="is_user_recipient == False"
                         />
-                        <!-- groups="pulse_digest.group_pulse_recipient" -->
                     </header>
                     <sheet>
                         <group>

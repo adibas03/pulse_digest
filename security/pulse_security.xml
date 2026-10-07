@@ -2,17 +2,24 @@
 <!--
   Pulse — Security groups and record rules
 
-  Three tiers, each implying the one below:
+  Two tiers:
     group_pulse_viewer    — implied by base.group_user (every internal user).
                             Read-only view of the detector catalog and —
                             via pulse_config_user_rule / pulse_run_user_rule
                             — of the configs and runs they are a recipient of.
-    group_pulse_recipient — implies viewer. Can edit own res.users channel
-                            preferences.
-    group_pulse_admin     — implies recipient. Configures detectors, recipient
+    group_pulse_admin     — implies viewer. Configures detectors, recipient
                             lists, schedules. Sees ALL runs and raw findings.
 
-  All three belong to one Pulse privilege so they appear together under
+  There used to be a third, group_pulse_recipient, between the two. It was
+  removed: nothing — no ACL row, no record rule, no code path — actually
+  checked membership in it. Config/run visibility was always decided by
+  real recipient-list membership (company_recipient_ids, user_group_id,
+  recipient_group_ids), not by Pulse tier, so it granted nothing beyond
+  group_pulse_viewer. Re-add it (with an actual ACL row, rule, or gated
+  behavior behind it — e.g. who may edit their own channel preferences)
+  if a real distinction is ever needed; don't resurrect it as a label.
+
+  Both belong to one Pulse privilege so they appear together under
   Settings → Users & Companies → Users → Access Rights.
 
   Record rules:
@@ -62,20 +69,10 @@
         </record>
 
 
-        <record id="group_pulse_recipient" model="res.groups">
-            <field name="name">Recipient</field>
-            <field name="privilege_id" ref="pulse_privilege" />
-            <field name="implied_ids" eval="[(4, ref('group_pulse_viewer'))]" />
-            <!-- <field name="user_ids" eval="[(4, ref('base.user_demo'))]" /> -->
-            <field name="comment">Receives the Pulse daily digest. Can read own runs and findings,
-                and edit own channel preferences.</field>
-        </record>
-
-
         <record id="group_pulse_admin" model="res.groups">
             <field name="name">Administrator</field>
             <field name="privilege_id" ref="pulse_privilege" />
-            <field name="implied_ids" eval="[(4, ref('group_pulse_recipient'))]" />
+            <field name="implied_ids" eval="[(4, ref('group_pulse_viewer'))]" />
             <field name="user_ids" eval="[(4, ref('base.user_admin'))]" />
             <field name="comment">Configures detectors, recipient lists, schedules. Sees all runs
                 and findings across the company.</field>
@@ -84,16 +81,6 @@
         <record id="base.group_user" model="res.groups">
             <field name="implied_ids" eval="[(4, ref('group_pulse_viewer'))]" />
         </record>
-
-
-        <!-- ============================================================ -->
-        <!-- Demo user                                                 -->
-        <!-- ============================================================ -->
-
-
-        <!-- <record id="base.user_demo" model="res.users">
-            <field name="groups_id" eval="[(4, ref('group_pulse_recipient'))]" />
-        </record> -->
 
 
         <!-- ============================================================ -->

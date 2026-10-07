@@ -390,8 +390,9 @@ class PulseConfig(models.Model):
         domain="[('company_ids', 'in', company_id)]")
 
     user_group_id = fields.Many2one("res.groups",
-        string="Users to include (per-user mode)",
-        default=lambda self: self.env.ref("pulse_digest.group_pulse_recipient"))
+        string="User Digests to run (per-user mode)",
+        help="Who gets a per-user digest. No default — pick a group "
+             "(or leave empty to only run company-wide).")
 
     # Detectors
     detector_line_ids = fields.One2many(
@@ -1917,7 +1918,7 @@ Recipient column showed "–" for both below) — meaning a Recipient could
 never see *what* they were configured to receive, only their own run
 history. What's actually built:
 
-### 8.1 Groups (`security/pulse_security.xml`) — actual: three tiers, each implying the one below
+### 8.1 Groups (`security/pulse_security.xml`) — actual: two tiers, admin implying viewer
 
 - `group_pulse_viewer` — read-only visibility into the `pulse.detector`
   catalog and — through `pulse_config_user_rule` and `pulse_run_user_rule`
@@ -1926,16 +1927,27 @@ history. What's actually built:
   automatically to every employee — not something an admin assigns
   individually. Answers "what is Pulse configured to do, and what was I
   sent," not "am I a Pulse power user."
-- `group_pulse_recipient` — implies `group_pulse_viewer`. Note what this tier
-  no longer does: it does **not** gate run access any more (that follows the
-  audience, not the tier — §8.3). It's the default `user_group_id` for
-  per-user mode and the natural grouping for people an admin wants in the
-  per-user audience, nothing more.
-- `group_pulse_admin` — implies `group_pulse_recipient` (and transitively
-  `group_pulse_viewer`). Configures detectors, recipient lists, schedule.
-  Sees all runs and the raw findings (`pulse.run.line`).
+- `group_pulse_admin` — implies `group_pulse_viewer`. Configures detectors,
+  recipient lists, schedule. Sees all runs and the raw findings
+  (`pulse.run.line`).
 
-All three share one `res.groups.privilege` (`pulse_privilege`, under a new
+**A third tier, `group_pulse_recipient`, existed between these two and was
+removed this iteration.** It implied Viewer and was implied by Admin, and
+was the default `user_group_id`/`recipient_group_ids` target in code and
+demo data — but no ACL row, record rule, or code path ever actually checked
+membership in it specifically. Config/run visibility was always decided by
+real recipient-list membership (`company_recipient_ids`, `user_group_id`,
+`recipient_group_ids`), not by Pulse tier (§8.3), so once §8.3's config rule
+made that explicit for `pulse.config` too, the group granted nothing a plain
+`group_pulse_viewer` member didn't already have — it was a label, not a
+permission boundary. `user_group_id` now has no default (an admin must pick
+a group explicitly, or leave per-user mode unused); the demo config uses its
+own plain, non-privilege group (`demo_pulse_recipients`) instead. Re-add a
+third tier only once something real depends on it — e.g. gating who may
+edit their own channel preferences, the one thing this tier was ever
+documented as doing but never actually had wired up.
+
+Both tiers share one `res.groups.privilege` (`pulse_privilege`, under a new
 `module_category_pulse` category) so they render together as a group under
 Settings → Users, rather than as unrelated checkboxes. `res.groups.privilege`
 is itself an Odoo 19 addition — `res.groups.category_id` was removed in favor
@@ -1943,14 +1955,14 @@ of `privilege_id` pointing at this new model (§1b).
 
 ### 8.2 ACL (`security/ir.model.access.csv`) — actual
 
-| Model                   | Viewer                                 | Recipient          | Admin (read/write/create/delete) |
-| ----------------------- | -------------------------------------- | ------------------ | --------------------------------- |
-| `pulse.detector`        | ✓ read                                 | (inherits Viewer)  | ✓ all                              |
-| `pulse.config`          | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
-| `pulse.config.detector` | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
-| `pulse.run`             | ✓ read — rows limited by record rule  | (inherits Viewer)  | ✓ all                              |
-| `pulse.run.line`        | –                                      | –                  | ✓ all                              |
-| `pulse.run.wizard`      | –                                      | –                  | ✓ all                              |
+| Model                   | Viewer                                | Admin (read/write/create/delete) |
+| ----------------------- | -------------------------------------- | --------------------------------- |
+| `pulse.detector`        | ✓ read                                 | ✓ all                              |
+| `pulse.config`          | ✓ read — rows limited by record rule  | ✓ all                              |
+| `pulse.config.detector` | ✓ read — rows limited by record rule  | ✓ all                              |
+| `pulse.run`             | ✓ read — rows limited by record rule  | ✓ all                              |
+| `pulse.run.line`        | –                                      | ✓ all                              |
+| `pulse.run.wizard`      | –                                      | ✓ all                              |
 
 ACL says which models a group may touch at all; the record rule (§8.3)
 says which rows. `pulse.run` moved down to the Viewer tier because a

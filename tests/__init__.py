@@ -4,3 +4,10 @@ from . import test_detectors_sales
 from . import test_run_execution
 from . import test_suppression_gate
 from . import test_security
+from . import test_channel_dispatch
+from . import test_digest_access_filtering
+from . import test_pulse_run_fields
+from . import test_pulse_run_wizard
+from . import test_recipient_resolution
+from . import test_multi_config
+from . import test_default_detectors

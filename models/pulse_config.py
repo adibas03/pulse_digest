@@ -64,7 +64,8 @@ class PulseConfig(models.Model):
 
     user_group_id = fields.Many2one("res.groups",
                                     string="User Digests to run (per-user mode)",
-                                    default=lambda self: self.env.ref("pulse_digest.group_pulse_recipient"))
+                                    help="Who gets a per-user digest. No default — pick a group "
+                                         "(or leave empty to only run company-wide).")
 
     is_user_recipient = fields.Boolean(
         string='User is recipient', compute="_compute_is_user_recipient", store=False)

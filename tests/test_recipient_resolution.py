@@ -11,9 +11,11 @@ detector/finding setup needed, since the mock doesn't care whether
 run.line_ids ends up empty.
 
 recipient_group_ids is tested against a plain, dedicated group (team_group)
-kept outside the Pulse group hierarchy (group_recipient/group_admin) so
-membership here is exactly what each test sets, not affected by implied_ids
-chains or the shared fixture's own group memberships.
+kept outside the Pulse group hierarchy (group_viewer/group_admin — the
+fixture's own group_recipient is likewise a plain bucket, not a Pulse tier,
+see common.py) so membership here is exactly what each test sets, not
+affected by implied_ids chains or the shared fixture's own group
+memberships.
 """
 from unittest.mock import patch
 
