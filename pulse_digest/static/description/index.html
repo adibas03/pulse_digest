@@ -11,17 +11,14 @@
      Bootstrap theme, rather than relying on Bootstrap's default --bs-
      primary, which may not match. -->
 
-<section class="container py-5" style="max-width: 960px;">
-  <link
-    href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css"
-    rel="stylesheet"
-  />
-
+<section class="container py-5" style="max-width: 960px">
   <!-- ─────────────── Hero ─────────────── -->
   <div class="pb-4 mb-4 border-bottom">
     <img src="icon.png" alt="Pulse" width="72" height="72" class="mb-3" />
-    <h1 class="display-6 fw-bold" style="letter-spacing: -0.02em;">Pulse - Daily Exception Digest</h1>
-    <p class="lead text-muted mt-2" style="max-width: 42em;">
+    <h1 class="display-6 fw-bold" style="letter-spacing: -0.02em">
+      Pulse - Daily Exception Digest
+    </h1>
+    <p class="lead text-muted mt-2" style="max-width: 42em">
       Find what needs attention across Accounting and Sales, on the schedule you
       set. Pulse lists the actual records to act on - not just counts - with
       statistical anomaly detection for the outliers a fixed threshold misses.
@@ -49,33 +46,33 @@
     <tbody>
       <tr>
         <td>Totals and counts per period</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
       </tr>
       <tr>
         <td>The individual records behind the number</td>
         <td class="text-muted">-</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
       </tr>
       <tr>
         <td>Statistical detection against a rolling baseline</td>
         <td class="text-muted">-</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
       </tr>
       <tr>
         <td>Per-user scoping by record ownership</td>
         <td class="text-muted">-</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
       </tr>
       <tr>
         <td>In-app notification delivery</td>
         <td class="text-muted">-</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Yes</td>
+        <td class="fw-bold" style="color: #3d4e8c">Yes</td>
       </tr>
       <tr>
         <td>New metrics without a UI builder</td>
         <td class="text-muted">-</td>
-        <td class="fw-bold" style="color: #3d4e8c;">Plain Python, LGPL-3</td>
+        <td class="fw-bold" style="color: #3d4e8c">Plain Python, LGPL-3</td>
       </tr>
     </tbody>
   </table>
@@ -92,7 +89,10 @@
   <h3 class="h6 mt-4 mb-3">Accounting</h3>
   <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">Overdue Invoices</h3>
           <p class="card-text small text-muted">
@@ -103,7 +103,10 @@
       </div>
     </div>
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">Credit Limit Breaches</h3>
           <p class="card-text small text-muted">
@@ -114,15 +117,20 @@
       </div>
     </div>
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">
             Payment Delay Outliers
-            <span class="badge ms-1" style="background: #eef0f7; color: #3d4e8c;">statistical</span>
+            <span class="badge ms-1" style="background: #eef0f7; color: #3d4e8c"
+              >statistical</span
+            >
           </h3>
           <p class="card-text small text-muted">
-            Customers whose latest payment delay is unusually high against their own
-            rolling baseline - a reliable payer who suddenly slips.
+            Customers whose latest payment delay is unusually high against their
+            own rolling baseline - a reliable payer who suddenly slips.
           </p>
         </div>
       </div>
@@ -132,37 +140,48 @@
   <h3 class="h6 mt-4 mb-3">Sales and CRM</h3>
   <div class="row row-cols-1 row-cols-md-3 g-3 mb-4">
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">Stale Opportunities</h3>
           <p class="card-text small text-muted">
-            Open opportunities with no stage movement for a configurable number of
-            days.
+            Open opportunities with no stage movement for a configurable number
+            of days.
           </p>
         </div>
       </div>
     </div>
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">Deals Closing Today</h3>
           <p class="card-text small text-muted">
-            Open opportunities whose expected close date falls inside a configurable
-            horizon.
+            Open opportunities whose expected close date falls inside a
+            configurable horizon.
           </p>
         </div>
       </div>
     </div>
     <div class="col">
-      <div class="card h-100 border-top" style="border-top-width: 3px; border-top-color: #3d4e8c;">
+      <div
+        class="card h-100"
+        style="border-top-width: 3px; border-top-color: #3d4e8c"
+      >
         <div class="card-body">
           <h3 class="h6 card-title">
             Deal Velocity Drop
-            <span class="badge ms-1" style="background: #eef0f7; color: #3d4e8c;">statistical</span>
+            <span class="badge ms-1" style="background: #eef0f7; color: #3d4e8c"
+              >statistical</span
+            >
           </h3>
           <p class="card-text small text-muted">
-            Salespeople whose stage-advance count this week is unusually low against
-            their own rolling baseline.
+            Salespeople whose stage-advance count this week is unusually low
+            against their own rolling baseline.
           </p>
         </div>
       </div>
@@ -248,7 +267,9 @@
   </p>
   <p>
     <strong>WhatsApp delivery</strong>
-    <span class="badge ms-1" style="background: #fbf3dd; color: #8a6d1f;">coming soon</span><br />
+    <span class="badge ms-1" style="background: #fbf3dd; color: #8a6d1f"
+      >coming soon</span
+    ><br />
     WhatsApp is the next channel and is already written against Odoo 19's
     WhatsApp composer. It arrives in a following release, once it has been
     confirmed working in a real install: it needs Odoo's WhatsApp app and a
@@ -267,7 +288,10 @@
     one catalog record. The whole framework is LGPL-3.
   </p>
 
-  <pre class="bg-light rounded p-3 small" style="border: 1px solid #e2e5ed; border-left: 3px solid #3d4e8c;"><code>from odoo.addons.pulse_digest.models.constants import SEVERITY_WARNING
+  <pre
+    class="bg-light rounded p-3 small"
+    style="border: 1px solid #e2e5ed; border-left: 3px solid #3d4e8c"
+  ><code>from odoo.addons.pulse_digest.models.constants import SEVERITY_WARNING
 from odoo.addons.pulse_digest.models.detectors.base import (
     PulseDetectorBase, PulseFinding,
 )
@@ -303,7 +327,15 @@ class LowStockDetector(PulseDetectorBase):
   <!-- ─────────────── Good to know ─────────────── -->
   <h2 class="h4 mt-5 mb-3 pb-2 border-bottom">Good to know</h2>
 
-  <div class="my-4" style="background: #f6f7fa; border-left: 3px solid #3d4e8c; border-radius: 0 4px 4px 0; padding: 1rem 1.15rem;">
+  <div
+    class="my-4"
+    style="
+      background: #f6f7fa;
+      border-left: 3px solid #3d4e8c;
+      border-radius: 0 4px 4px 0;
+      padding: 1rem 1.15rem;
+    "
+  >
     <p class="mb-2">
       <strong>Every finding is delivered on every run.</strong> This release has
       no recurrence back-off: an invoice that stays overdue appears in
@@ -345,7 +377,7 @@ class LowStockDetector(PulseDetectorBase):
 
   <table class="table table-borderless">
     <colgroup>
-      <col style="width: 11em;" />
+      <col style="width: 11em" />
       <col />
     </colgroup>
     <tbody>
