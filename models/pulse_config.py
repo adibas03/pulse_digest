@@ -82,7 +82,14 @@ class PulseConfig(models.Model):
     inapp_enabled = fields.Boolean(
         default=True, string="In-App", help=_CHANNEL_HELP)
     whatsapp_enabled = fields.Boolean(
-        default=False, string="WhatsApp", help=_CHANNEL_HELP)
+        default=False, string="WhatsApp",
+        help="Requires the WhatsApp app installed and a Meta-approved "
+             "message template configured (pulse_digest.whatsapp_template_"
+             "xmlid) — neither of which this module can set up for you. "
+             "Disabled here (readonly in the form) until that's tested and "
+             "confirmed working in a real install; see models/pulse_channel"
+             ".py's WhatsAppChannel docstring for the setup steps, and the "
+             "manifest's version-promotion comment. " + _CHANNEL_HELP)
 
     # Detectors
     # context={"active_test": False}: without it, deactivating a detector

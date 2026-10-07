@@ -45,7 +45,19 @@
                         <group string="Channels">
                             <field name="email_enabled" />
                             <field name="inapp_enabled" />
-                            <field name="whatsapp_enabled" />
+                            <!-- Hard readonly, not conditional: re-open this
+                                 once WhatsApp delivery has been tested and
+                                 confirmed working in a real install, in a
+                                 release that also bumps the manifest's
+                                 version per its own promotion comment —
+                                 not before. -->
+                            <field name="whatsapp_enabled" readonly="1" />
+                            <div colspan="2" class="text-muted">
+                                WhatsApp requires setup outside this module
+                                (a Meta-approved message template) — disabled
+                                until that's tested and confirmed in a
+                                release. See the field's tooltip for details.
+                            </div>
                         </group>
                         <notebook>
                             <page string="Detectors">
